@@ -1,91 +1,19 @@
 // Junket — интервью персонажей как актёров
 // Этап 1: фундамент — окно, вкладки, архив интервью у каждого чата свой
 // Этап 2: выбор диапазона сообщений с превью
+// Этап 3: подключение к модели, «Что знает модель», первая сырая генерация
 
-const MODULE = 'junket';     // ключ в extension_settings
-const META_KEY = 'junket';   // ключ в метаданных чата
-
-const DEFAULT_SETTINGS = Object.freeze({
-    version: 1,
-});
-
-// ---------- Общее ----------
-
-function ctx() {
-    // Всегда берём свежий контекст: после смены чата объекты внутри меняются
-    return SillyTavern.getContext();
-}
-
-function getSettings() {
-    const c = ctx();
-    if (!c.extensionSettings[MODULE] || typeof c.extensionSettings[MODULE] !== 'object') {
-        c.extensionSettings[MODULE] = structuredClone(DEFAULT_SETTINGS);
-    }
-    const s = c.extensionSettings[MODULE];
-    for (const [key, value] of Object.entries(DEFAULT_SETTINGS)) {
-        if (s[key] === undefined) s[key] = structuredClone(value);
-    }
-    return s;
-}
-
-function escapeHtml(text) {
-    return String(text ?? '')
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;')
-        .replace(/'/g, '&#39;');
-}
-
-function makeId() {
-    return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
-}
-
-function formatDate(ts) {
-    try {
-        return new Date(ts).toLocaleString('ru-RU', {
-            day: 'numeric',
-            month: 'short',
-            year: 'numeric',
-            hour: '2-digit',
-            minute: '2-digit',
-        });
-    } catch {
-        return '';
-    }
-}
-
-async function confirmPopup(text) {
-    const c = ctx();
-    if (typeof c.callGenericPopup === 'function' && c.POPUP_TYPE) {
-        const result = await c.callGenericPopup(text, c.POPUP_TYPE.CONFIRM);
-        return result === 1;
-    }
-    return window.confirm(text);
-}
-
-// ---------- Данные чата ----------
-
-function currentChatId() {
-    return ctx().getCurrentChatId?.() || null;
-}
-
-function getChatStore() {
-    if (!currentChatId()) return null;
-    const meta = ctx().chatMetadata;
-    if (!meta) return null;
-    if (!meta[META_KEY] || typeof meta[META_KEY] !== 'object') {
-        meta[META_KEY] = { interviews: [], cast: null };
-    }
-    const store = meta[META_KEY];
-    if (!Array.isArray(store.interviews)) store.interviews = [];
-    if (store.cast === undefined) store.cast = null;
-    return store;
-}
-
-async function saveChatStore() {
-    await ctx().saveMetadata();
-}
+import {
+    ctx, getSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
+    currentChatId, getChatStore, saveChatStore, saveChatStoreDebounced, TOAST_TITLE,
+} from './store.js';
+import {
+    ACTIVE_KIND_LABELS, getLorebookList, resolveLoreSelection, getSourceFlags, storeSources,
+    countLorebookTokens, resetLoreTokenCache, collectSources, buildSceneText,
+} from './sources.js';
+import { buildInterviewPrompt } from './prompt.js';
+import { requestModel } from './connection.js';
+import { addSettingsDrawer } from './settings.js';
 
 // ---------- Окно ----------
 
@@ -145,6 +73,8 @@ function openWindow(tab) {
     if (tab) activeTab = tab;
     overlayEl.classList.add('jnk-open');
     document.addEventListener('keydown', onKeyDown);
+    // Лорбуки могли поменяться, пока окно было закрыто — веса пересчитаем
+    resetLoreTokenCache();
     renderAll();
 }
 
@@ -187,10 +117,8 @@ function renderTabs() {
 
 // ---------- Выбор сообщений ----------
 
-const QUICK_LAST = [10, 20];          // кнопки «Последние N»
-const PREVIEW_CHARS = 120;            // сколько символов показывать в превью
-const PREVIEW_COLLAPSE_AFTER = 40;    // длиннее — показываем начало и конец, середину сворачиваем
-const PREVIEW_EDGE = 15;              // сколько сообщений показывать с каждого края при сворачивании
+const QUICK_LAST = [10, 20];   // кнопки «Последние N»; первое число — заодно выбор по умолчанию
+const PREVIEW_CHARS = 120;     // сколько символов показывать в превью
 
 // Черновик диапазона для каждого чата (живёт до перезагрузки страницы)
 const rangeDrafts = new Map();
@@ -246,7 +174,7 @@ function validateRange(draft) {
     return { ok: true, from, to };
 }
 
-// Готовый диапазон для генерации (понадобится на этапе 3); null, если выбран неверно
+// Готовый диапазон для генерации; null, если выбран неверно
 function getSelectedRange() {
     const result = validateRange(getDraft());
     return result.ok ? { from: result.from, to: result.to } : null;
@@ -262,7 +190,7 @@ function lastInterviewRangeEnd() {
 
 function cleanPreviewText(text) {
     return String(text ?? '')
-        .replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<(think|thinking|reasoning|thought|rp_preflight)>[\s\S]*?<\/\1>/gi, ' ')
         .replace(/<[^>]*>/g, ' ')
         .replace(/[*_~`]+/g, '')
         .replace(/\s+/g, ' ')
@@ -295,6 +223,7 @@ function renderPreview() {
         summary.innerHTML = `<span class="jnk-error">${escapeHtml(result.error)}</span>`;
         box.innerHTML = '';
         box.classList.add('jnk-hidden');
+        updateGoButton();
         return;
     }
 
@@ -302,16 +231,14 @@ function renderPreview() {
     const count = to - from + 1;
     summary.textContent = `Выбрано сообщений: ${count}`;
 
-    let rows = '';
-    if (count > PREVIEW_COLLAPSE_AFTER) {
-        for (let i = from; i < from + PREVIEW_EDGE; i++) rows += previewRowHtml(i);
-        rows += `<div class="jnk-preview-gap">… ещё ${count - PREVIEW_EDGE * 2} сообщ. посередине …</div>`;
-        for (let i = to - PREVIEW_EDGE + 1; i <= to; i++) rows += previewRowHtml(i);
-    } else {
-        for (let i = from; i <= to; i++) rows += previewRowHtml(i);
-    }
+    // Только первое и последнее — чтобы проверить, что не промахнулась
+    let rows = previewRowHtml(from);
+    if (count > 2) rows += `<div class="jnk-preview-gap">… ещё ${count - 2} сообщ. между ними …</div>`;
+    if (count > 1) rows += previewRowHtml(to);
+
     box.innerHTML = rows;
     box.classList.remove('jnk-hidden');
+    updateGoButton();
 }
 
 function applyRange(from, to) {
@@ -324,21 +251,14 @@ function applyRange(from, to) {
     renderPreview();
 }
 
-function renderNewPane() {
-    if (!overlayEl) return;
-    const pane = overlayEl.querySelector('[data-pane="new"]');
-    if (!currentChatId()) {
-        pane.innerHTML = `<div class="jnk-empty">Открой чат, чтобы снять интервью по его сценам 🎬</div>`;
-        return;
-    }
-
+function rangeSectionHtml() {
     const draft = getDraft();
     const sinceLast = lastInterviewRangeEnd();
     const quickButtons = QUICK_LAST
         .map((n) => `<button class="jnk-chip" type="button" data-last="${n}">Последние ${n}</button>`)
         .join('');
 
-    pane.innerHTML = `
+    return `
         <div class="jnk-section">
             <div class="jnk-section-title">Какие сообщения</div>
             <div class="jnk-range-row">
@@ -358,11 +278,10 @@ function renderNewPane() {
             <div class="jnk-hint">Номера — как у сообщений в таверне (#520).</div>
             <div class="jnk-range-summary"></div>
             <div class="jnk-preview jnk-hidden"></div>
-        </div>
-        <div class="jnk-empty jnk-later">
-            Источники, формат и вайбы появятся на следующем этапе.
         </div>`;
+}
 
+function bindRangeSection(pane) {
     const fromInput = pane.querySelector('.jnk-range-from');
     const toInput = pane.querySelector('.jnk-range-to');
     let typingTimer = null;
@@ -388,19 +307,238 @@ function renderNewPane() {
         const last = lastIndex();
         if (end === null || last < 0) return;
         if (end >= last) {
-            toastr.info('После прошлого интервью новых сообщений ещё нет');
+            toastr.info('После прошлого интервью новых сообщений ещё нет', TOAST_TITLE);
             return;
         }
         applyRange(end + 1, last);
     });
+}
+
+// ---------- Что знает модель ----------
+
+let loreList = [];   // текущий список лорбуков в окне: { name, activeKind }
+
+function sourcesSectionHtml() {
+    const store = getChatStore();
+    const flags = getSourceFlags(store?.sources);
+    const selected = resolveLoreSelection(store?.sources);
+    loreList = getLorebookList();
+
+    const check = (flag, label) => `
+        <label class="checkbox_label jnk-check">
+            <input type="checkbox" data-flag="${flag}" ${flags[flag] ? 'checked' : ''}>
+            <span>${label}</span>
+        </label>`;
+
+    const loreRows = loreList.length
+        ? loreList.map((item, i) => `
+            <label class="jnk-lore-row ${item.activeKind ? 'jnk-lore-active' : ''}">
+                <input type="checkbox" data-lore="${i}" ${selected.has(item.name) ? 'checked' : ''}>
+                <span class="jnk-lore-name">${escapeHtml(item.name)}</span>
+                ${item.activeKind ? `<span class="jnk-badge">${escapeHtml(ACTIVE_KIND_LABELS[item.activeKind] || '')}</span>` : ''}
+                <span class="jnk-lore-tokens" data-tokens="${i}">…</span>
+            </label>`).join('')
+        : '<div class="jnk-muted jnk-lore-empty">Лорбуков нет.</div>';
+
+    return `
+        <div class="jnk-section jnk-sources">
+            <div class="jnk-section-title">Что знает модель</div>
+            <div class="jnk-checks">
+                ${check('card', 'Карточка персонажа')}
+                ${check('persona', 'Персона')}
+                ${check('firstMes', 'Первое сообщение')}
+            </div>
+            <div class="jnk-subtitle">Лорбуки</div>
+            <div class="jnk-lore-list">${loreRows}</div>
+            <div class="jnk-lore-summary"></div>
+        </div>`;
+}
+
+function readSourcesFromPane(pane) {
+    const flags = {};
+    pane.querySelectorAll('[data-flag]').forEach((input) => {
+        flags[input.dataset.flag] = input.checked;
+    });
+    const selectedNames = [];
+    pane.querySelectorAll('[data-lore]').forEach((input) => {
+        const item = loreList[Number(input.dataset.lore)];
+        if (item && input.checked) selectedNames.push(item.name);
+    });
+    return { flags, selectedNames };
+}
+
+function bindSourcesSection(pane) {
+    const section = pane.querySelector('.jnk-sources');
+    if (!section) return;
+    section.addEventListener('change', (e) => {
+        if (!e.target.matches('[data-flag], [data-lore]')) return;
+        const store = getChatStore();
+        if (!store) return;
+        const { flags, selectedNames } = readSourcesFromPane(section);
+        storeSources(store, flags, selectedNames);
+        saveChatStoreDebounced();
+        if (e.target.matches('[data-lore]')) renderLoreSummary();
+    });
+
+    // Веса лорбуков подгружаются асинхронно
+    loreList.forEach((item, i) => {
+        countLorebookTokens(item.name).then((tokens) => {
+            const el = section.querySelector(`[data-tokens="${i}"]`);
+            if (el && el.isConnected) el.textContent = formatNumber(tokens);
+        });
+    });
+    renderLoreSummary();
+}
+
+async function renderLoreSummary() {
+    if (!overlayEl) return;
+    const box = overlayEl.querySelector('.jnk-lore-summary');
+    if (!box) return;
+    const section = overlayEl.querySelector('.jnk-sources');
+    const { selectedNames } = readSourcesFromPane(section);
+    const limit = Number(getSettings().loreTokenLimit) || 30000;
+
+    if (!loreList.length) {
+        box.textContent = '';
+        return;
+    }
+    if (!selectedNames.length) {
+        box.innerHTML = '<span class="jnk-muted">Лорбуки не выбраны.</span>';
+        return;
+    }
+
+    box.innerHTML = '<span class="jnk-muted">Считаю токены…</span>';
+    const weights = await Promise.all(selectedNames.map((name) => countLorebookTokens(name)));
+    if (!box.isConnected) return;
+    const total = weights.reduce((sum, n) => sum + (Number(n) || 0), 0);
+    const over = total > limit;
+    box.innerHTML = `<span class="${over ? 'jnk-warn' : ''}">Лорбуки: ${formatNumber(total)} из ${formatNumber(limit)} токенов${over ? ' — лишнее отрежется с конца' : ''}</span>`;
+}
+
+// ---------- Генерация ----------
+
+let generation = null;           // { controller, chatId } пока идёт запрос
+const rawResults = new Map();    // chatId → { text, from, to } — сырой ответ, живёт до перезагрузки
+
+function actionsSectionHtml() {
+    return `
+        <div class="jnk-actions">
+            <button class="jnk-go" type="button"></button>
+            <span class="jnk-status"></span>
+        </div>
+        <div class="jnk-result"></div>`;
+}
+
+function updateGoButton() {
+    if (!overlayEl) return;
+    const btn = overlayEl.querySelector('.jnk-go');
+    const status = overlayEl.querySelector('.jnk-status');
+    if (!btn) return;
+    const running = generation && generation.chatId === currentChatId();
+    btn.classList.toggle('jnk-stop', Boolean(running));
+    btn.innerHTML = running ? '<i class="fa-solid fa-stop"></i> Стоп' : 'Мотор! 🎬';
+    btn.disabled = !running && !getSelectedRange();
+    if (status) status.innerHTML = running ? '<i class="fa-solid fa-spinner fa-spin"></i> Снимаем…' : '';
+}
+
+function renderResult() {
+    if (!overlayEl) return;
+    const box = overlayEl.querySelector('.jnk-result');
+    if (!box) return;
+    const result = rawResults.get(currentChatId());
+    if (!result) {
+        box.innerHTML = '';
+        return;
+    }
+    box.innerHTML = `
+        <div class="jnk-section-title">Сырой ответ модели</div>
+        <div class="jnk-hint">Сообщения ${result.from}–${result.to} · красивый вид будет на этапе 4</div>
+        <pre class="jnk-raw">${escapeHtml(result.text)}</pre>`;
+}
+
+async function onGoClick() {
+    if (generation) {
+        // Стоп: кнопку отпускаем сразу. Если запрос идёт через текущее подключение
+        // таверны, прервать его нельзя — ответ просто выбросим, когда придёт.
+        generation.controller.junketQuiet = true;
+        generation.controller.abort();
+        generation = null;
+        updateGoButton();
+        toastr.info('Генерация остановлена', TOAST_TITLE);
+        return;
+    }
+
+    const range = getSelectedRange();
+    if (!range) {
+        toastr.warning('Сначала выбери сообщения', TOAST_TITLE);
+        return;
+    }
+
+    const chatId = currentChatId();
+    const store = getChatStore();
+    const controller = new AbortController();
+    generation = { controller, chatId };
+    updateGoButton();
+
+    try {
+        const sources = await collectSources(store?.sources);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        const sceneText = buildSceneText(range.from, range.to);
+        if (!sceneText) throw new Error('В выбранных сообщениях нет текста.');
+
+        const { instruction, contextText } = buildInterviewPrompt({ sourcesText: sources.text, sceneText, ...range });
+        const text = await requestModel({ instruction, contextText }, controller.signal);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (!text.trim()) throw new Error('Модель вернула пустой ответ — попробуй ещё раз или увеличь лимит токенов ответа.');
+
+        rawResults.set(chatId, { text, ...range });
+        if (sources.droppedEntries) {
+            toastr.warning(`Лорбуки не влезли в лимит, отрезано записей: ${sources.droppedEntries}`, TOAST_TITLE);
+        }
+        toastr.success('Интервью снято 🎬', TOAST_TITLE);
+    } catch (error) {
+        if (controller.signal.aborted || error?.name === 'AbortError') {
+            if (!controller.junketQuiet) toastr.info('Генерация остановлена', TOAST_TITLE);
+        } else {
+            console.error('[Junket]', error);
+            toastr.error(String(error?.message || error), TOAST_TITLE);
+        }
+    } finally {
+        if (generation?.controller === controller) generation = null;
+        if (isOpen()) {
+            updateGoButton();
+            if (currentChatId() === chatId) renderResult();
+        }
+    }
+}
+
+// ---------- Вкладка «Новое интервью» ----------
+
+function renderNewPane() {
+    if (!overlayEl) return;
+    const pane = overlayEl.querySelector('[data-pane="new"]');
+    if (!currentChatId()) {
+        pane.innerHTML = `<div class="jnk-empty">Открой чат, чтобы снять интервью по его сценам 🎬</div>`;
+        return;
+    }
+
+    pane.innerHTML = `${rangeSectionHtml()}${sourcesSectionHtml()}${actionsSectionHtml()}`;
+
+    bindRangeSection(pane);
+    bindSourcesSection(pane);
+    pane.querySelector('.jnk-go').addEventListener('click', onGoClick);
 
     renderPreview();
+    renderResult();
 }
 
 function onChatMessagesChanged() {
     // Новое/удалённое/изменённое сообщение — освежаем превью, если окно открыто
     if (isOpen()) renderPreview();
 }
+
+// ---------- Архив ----------
 
 function renderArchive() {
     if (!overlayEl) return;
@@ -444,8 +582,6 @@ function renderArchive() {
     pane.querySelector('.jnk-test-add').addEventListener('click', addTestRecord);
 }
 
-// ---------- Действия с архивом ----------
-
 async function addTestRecord() {
     const store = getChatStore();
     if (!store) return;
@@ -460,7 +596,7 @@ async function addTestRecord() {
     });
     await saveChatStore();
     renderArchive();
-    toastr.success('Тестовая запись добавлена в этот чат');
+    toastr.success('Тестовая запись добавлена в этот чат', TOAST_TITLE);
 }
 
 async function deleteInterview(id) {
@@ -477,29 +613,6 @@ async function deleteInterview(id) {
 
 // ---------- Встраивание в таверну ----------
 
-function addSettingsDrawer() {
-    const host = document.getElementById('extensions_settings2') || document.getElementById('extensions_settings');
-    if (!host || document.getElementById('jnk-settings')) return;
-
-    const wrap = document.createElement('div');
-    wrap.id = 'jnk-settings';
-    wrap.innerHTML = `
-        <div class="inline-drawer">
-            <div class="inline-drawer-toggle inline-drawer-header">
-                <b><i class="fa-solid fa-clapperboard" style="margin-right: 6px;"></i>「 JUNKET 」</b>
-                <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
-            </div>
-            <div class="inline-drawer-content">
-                <div class="jnk-drawer-hint">Интервью с актёрами по выбранным сценам чата.</div>
-                <button class="menu_button jnk-open-btn" type="button">
-                    <i class="fa-solid fa-clapperboard"></i> Открыть Junket
-                </button>
-            </div>
-        </div>`;
-    wrap.querySelector('.jnk-open-btn').addEventListener('click', () => openWindow());
-    host.appendChild(wrap);
-}
-
 function addWandButton() {
     const menu = document.getElementById('extensionsMenu');
     if (!menu || document.getElementById('jnk-wand')) return;
@@ -514,13 +627,21 @@ function addWandButton() {
 }
 
 function onChatChanged() {
+    // Запрос по старому чату больше не нужен
+    if (generation) {
+        generation.controller.junketQuiet = true;
+        generation.controller.abort();
+        generation = null;
+        toastr.info('Генерация остановлена: сменился чат', TOAST_TITLE);
+    }
+    resetLoreTokenCache();
     // Окно открыто — перерисовываем под новый чат, иначе ничего не делаем
     if (isOpen()) renderAll();
 }
 
 jQuery(async () => {
     getSettings();
-    addSettingsDrawer();
+    addSettingsDrawer(() => openWindow());
     addWandButton();
 
     const { eventSource, event_types } = ctx();
