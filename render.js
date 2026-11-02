@@ -7,6 +7,7 @@
 // Внутри реплик: *ремарка*, **жирное**, абзацы через пустую строку.
 
 import { ctx, escapeHtml, formatDate } from './store.js';
+import { formatLabel } from './formats.js';
 import { user_avatar } from '../../../personas.js';
 
 // Цвета для актёров сверх первых двух (перс — цвет цитат темы, персона — цвет выделения)
@@ -115,8 +116,17 @@ function buildCastMap() {
 
 // ---------- Вёрстка ----------
 
+// Цензура как в Control и SCP: каждый [BLEEP] — чёрная плашка своей ширины
+const BLEEP_RE = /\[(?:BLEEP|BEEP|пип|пи-ип|бип)\]/gi;
+const REDACT_WIDTHS = [3.2, 2.4, 4.1, 2.9, 3.6, 2.2, 4.6];
+let redactCounter = 0;
+
 function inlineHtml(text) {
     return escapeHtml(text)
+        .replace(BLEEP_RE, () => {
+            const width = REDACT_WIDTHS[redactCounter++ % REDACT_WIDTHS.length];
+            return `<span class="jnk-redact" style="width:${width}em" title="Вырезано цензурой"></span>`;
+        })
         .replace(/\*\*([^*\n]+?)\*\*/g, '<strong>$1</strong>')
         .replace(/\*([^*\n]+?)\*/g, '<em class="jnk-dir">$1</em>');
 }
@@ -143,7 +153,9 @@ export function defaultTitle(range) {
  * item: { title, range, createdAt, text, test }
  */
 export function renderInterviewHtml(item) {
+    redactCounter = 0;
     const meta = [
+        formatLabel(item.format, item.venue),
         item.range ? `Сообщения ${item.range.from}–${item.range.to}` : '',
         item.createdAt ? formatDate(item.createdAt) : '',
     ].filter(Boolean).join(' · ');
@@ -210,5 +222,5 @@ export function interviewPlainText(item) {
         const who = turn.kind === 'q' ? 'Интервьюер' : (turn.character ? `${turn.actor} (${turn.character})` : turn.actor);
         return `${who}: ${turn.body}`;
     });
-    return `${title}\n\n${parts.join('\n\n')}`;
+    return `${title}\n\n${parts.join('\n\n')}`.replace(BLEEP_RE, '█████');
 }

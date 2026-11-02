@@ -2,6 +2,7 @@
 // Категории сворачиваются, как в Koma и DS Comments. При открытии все свёрнуты.
 
 import { ctx, getSettings, saveSettings, escapeHtml } from './store.js';
+import { LANGUAGES } from './formats.js';
 
 function categoryHtml(icon, title, body) {
     return `
@@ -50,7 +51,12 @@ function buildHtml() {
             <option value="min" ${s.reasoningEffort === 'auto' ? '' : 'selected'}>Минимум</option>
             <option value="auto" ${s.reasoningEffort === 'auto' ? 'selected' : ''}>На усмотрение модели</option>
         </select>
-        <div class="jnk-set-hint">Работает и с профилем, и напрямую.</div>`;
+        <div class="jnk-set-hint">Работает и с профилем, и напрямую.</div>
+
+        <label for="jnk_language" class="jnk-label">Язык интервью</label>
+        <select id="jnk_language" class="text_pole">
+            ${LANGUAGES.map((l) => `<option value="${l.id}" ${s.language === l.id ? 'selected' : ''}>${l.label}</option>`).join('')}
+        </select>`;
 
     const lore = `
         <label for="jnk_lore_limit" class="jnk-label">Лимит токенов на лорбуки</label>
@@ -175,6 +181,10 @@ export function addSettingsDrawer(onOpenWindow) {
     bindText('jnk_custom_key', 'customKey', (v) => v.trim());
     bindText('jnk_custom_model', 'customModel', (v) => v.trim());
     bindNumber('jnk_max_tokens', 'maxTokens', 1000, 32000, 6000);
+    document.getElementById('jnk_language').addEventListener('change', (e) => {
+        getSettings().language = LANGUAGES.some((l) => l.id === e.target.value) ? e.target.value : 'ru';
+        saveSettings();
+    });
     document.getElementById('jnk_reasoning').addEventListener('change', (e) => {
         getSettings().reasoningEffort = e.target.value === 'auto' ? 'auto' : 'min';
         saveSettings();

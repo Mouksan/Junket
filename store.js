@@ -24,6 +24,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     customModel: '',
     maxTokens: 6000,
     reasoningEffort: 'min',      // 'min' | 'auto'
+    language: 'ru',              // язык интервью: 'ru' | 'en'
 
     // Джейлбрейк (как в Koma)
     jailbreakEnabled: true,
@@ -116,18 +117,20 @@ export function currentChatId() {
  *   interviews — архив интервью
  *   cast       — кастинг актёров (этап 5)
  *   sources    — выбор «Что знает модель» для этого чата (null — ещё не трогали)
+ *   shoot      — выбор «Как снимаем» для этого чата (null — ещё не трогали)
  */
 export function getChatStore() {
     if (!currentChatId()) return null;
     const meta = ctx().chatMetadata;
     if (!meta) return null;
     if (!meta[META_KEY] || typeof meta[META_KEY] !== 'object') {
-        meta[META_KEY] = { interviews: [], cast: null, sources: null };
+        meta[META_KEY] = { interviews: [], cast: null, sources: null, shoot: null };
     }
     const store = meta[META_KEY];
     if (!Array.isArray(store.interviews)) store.interviews = [];
     if (store.cast === undefined) store.cast = null;
     if (store.sources === undefined) store.sources = null;
+    if (store.shoot === undefined) store.shoot = null;
     return store;
 }
 

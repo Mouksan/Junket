@@ -3,6 +3,7 @@
 // Этап 2: выбор диапазона сообщений с превью
 // Этап 3: подключение к модели, «Что знает модель», первая сырая генерация
 // Этап 4: журнальная вёрстка интервью и архив
+// Этап 5а: «Как снимаем» — формат, вопросы, болтовня, вайбы, пожелания
 
 import {
     ctx, getSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
@@ -16,6 +17,10 @@ import { buildInterviewPrompt } from './prompt.js';
 import { requestModel } from './connection.js';
 import { addSettingsDrawer } from './settings.js';
 import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle } from './render.js';
+import {
+    FORMATS, FAN_VENUES, BANTER, VIBES, QUESTIONS_MIN, QUESTIONS_MAX,
+    getFormat, normalizeShoot, formatLabel,
+} from './formats.js';
 
 // ---------- Окно ----------
 
@@ -316,6 +321,125 @@ function bindRangeSection(pane) {
     });
 }
 
+// ---------- Как снимаем ----------
+
+function getShoot() {
+    return normalizeShoot(getChatStore()?.shoot);
+}
+
+function saveShoot(shoot) {
+    const store = getChatStore();
+    if (!store) return;
+    store.shoot = shoot;
+    saveChatStoreDebounced();
+}
+
+function chipsHtml(items, selectedId, attr) {
+    return items.map((item) => `
+        <button class="jnk-chip ${item.id === selectedId ? 'jnk-chip-on' : ''}" type="button" ${attr}="${item.id}">${item.icon ? `${item.icon} ` : ''}${escapeHtml(item.label)}</button>`).join('');
+}
+
+function shootSectionHtml() {
+    const shoot = getShoot();
+    const vibeRows = VIBES.map((group) => `
+        <div class="jnk-vibe-row">
+            <span class="jnk-vibe-name">${escapeHtml(group.label)}</span>
+            <div class="jnk-chips" data-vibe-group="${group.id}">
+                ${chipsHtml(group.options, shoot.vibes[group.id], 'data-vibe')}
+            </div>
+        </div>`).join('');
+
+    return `
+        <div class="jnk-section jnk-shoot">
+            <div class="jnk-section-title">Как снимаем</div>
+
+            <div class="jnk-subtitle">Формат</div>
+            <div class="jnk-chips">${chipsHtml(FORMATS, shoot.format, 'data-format')}</div>
+
+            <div class="jnk-venue" ${shoot.format === 'fans' ? '' : 'hidden'}>
+                <div class="jnk-subtitle">Где</div>
+                <div class="jnk-chips">${chipsHtml(FAN_VENUES, shoot.venue, 'data-venue')}</div>
+            </div>
+
+            <div class="jnk-questions">
+                <label class="jnk-subtitle" for="jnk_questions">Вопросов: <span class="jnk-qcount">${shoot.questions}</span></label>
+                <input id="jnk_questions" class="jnk-range-slider" type="range" min="${QUESTIONS_MIN}" max="${QUESTIONS_MAX}" step="1" value="${shoot.questions}">
+                <div class="jnk-hint">Уточнения и болтовня между вопросами не считаются.</div>
+            </div>
+
+            <div class="jnk-subtitle">Болтовня</div>
+            <div class="jnk-seg jnk-banter">
+                ${BANTER.map((b) => `<button type="button" class="jnk-seg-btn ${b.id === shoot.banter ? 'active' : ''}" data-banter="${b.id}">${escapeHtml(b.label)}</button>`).join('')}
+            </div>
+            <div class="jnk-hint jnk-wild-hint" ${shoot.banter === 'wild' ? '' : 'hidden'}>Длинные интервью — следи за лимитом токенов ответа.</div>
+
+            <div class="jnk-subtitle">Вайбы</div>
+            <div class="jnk-vibes">${vibeRows}</div>
+
+            <label class="jnk-subtitle" for="jnk_wishes">Пожелания</label>
+            <textarea id="jnk_wishes" class="text_pole jnk-wishes" rows="2" placeholder="Например: пусть Маркус постоянно спойлерит, а Киллиан его пинает под столом.">${escapeHtml(shoot.wishes)}</textarea>
+        </div>`;
+}
+
+function bindShootSection(pane) {
+    const section = pane.querySelector('.jnk-shoot');
+    if (!section) return;
+
+    const setOn = (selector, el) => {
+        section.querySelectorAll(selector).forEach((b) => b.classList.toggle('jnk-chip-on', b === el));
+    };
+
+    section.addEventListener('click', (e) => {
+        const btn = e.target.closest('button');
+        if (!btn) return;
+        const shoot = getShoot();
+
+        if (btn.dataset.format) {
+            shoot.format = btn.dataset.format;
+            shoot.questions = getFormat(shoot.format).questions;
+            setOn('[data-format]', btn);
+            section.querySelector('.jnk-venue').hidden = shoot.format !== 'fans';
+            section.querySelector('#jnk_questions').value = shoot.questions;
+            section.querySelector('.jnk-qcount').textContent = shoot.questions;
+        } else if (btn.dataset.venue) {
+            shoot.venue = btn.dataset.venue;
+            setOn('[data-venue]', btn);
+        } else if (btn.dataset.banter) {
+            shoot.banter = btn.dataset.banter;
+            section.querySelectorAll('[data-banter]').forEach((b) => b.classList.toggle('active', b === btn));
+            section.querySelector('.jnk-wild-hint').hidden = shoot.banter !== 'wild';
+        } else if (btn.dataset.vibe) {
+            const group = btn.closest('[data-vibe-group]').dataset.vibeGroup;
+            // Повторный клик по выбранному вайбу снимает его
+            const turnOff = shoot.vibes[group] === btn.dataset.vibe;
+            shoot.vibes[group] = turnOff ? null : btn.dataset.vibe;
+            btn.closest('[data-vibe-group]').querySelectorAll('[data-vibe]').forEach((b) => {
+                b.classList.toggle('jnk-chip-on', !turnOff && b === btn);
+            });
+        } else {
+            return;
+        }
+        saveShoot(shoot);
+    });
+
+    const slider = section.querySelector('#jnk_questions');
+    slider.addEventListener('input', () => {
+        section.querySelector('.jnk-qcount').textContent = slider.value;
+    });
+    slider.addEventListener('change', () => {
+        const shoot = getShoot();
+        shoot.questions = Number(slider.value);
+        saveShoot(shoot);
+    });
+
+    const wishes = section.querySelector('#jnk_wishes');
+    wishes.addEventListener('input', () => {
+        const shoot = getShoot();
+        shoot.wishes = wishes.value;
+        saveShoot(shoot);
+    });
+}
+
 // ---------- Что знает модель ----------
 
 let loreList = [];   // текущий список лорбуков в окне: { name, activeKind }
@@ -482,7 +606,8 @@ async function onGoClick() {
         const sceneText = buildSceneText(range.from, range.to);
         if (!sceneText) throw new Error('В выбранных сообщениях нет текста.');
 
-        const { instruction, contextText } = buildInterviewPrompt({ sourcesText: sources.text, sceneText, ...range });
+        const shoot = getShoot();
+        const { instruction, contextText } = buildInterviewPrompt({ sourcesText: sources.text, sceneText, ...range, shoot });
         const text = await requestModel({ instruction, contextText }, controller.signal);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
         if (!text.trim()) throw new Error('Модель вернула пустой ответ — попробуй ещё раз или увеличь лимит токенов ответа.');
@@ -494,6 +619,8 @@ async function onGoClick() {
             createdAt: Date.now(),
             title: parsed.title || defaultTitle(range),
             range: { from: range.from, to: range.to },
+            format: shoot.format,
+            venue: shoot.format === 'fans' ? shoot.venue : null,
             text,
         };
         const saveTo = getChatStore();
@@ -542,9 +669,10 @@ function renderNewPane() {
         return;
     }
 
-    pane.innerHTML = `${rangeSectionHtml()}${sourcesSectionHtml()}${actionsSectionHtml()}`;
+    pane.innerHTML = `${rangeSectionHtml()}${shootSectionHtml()}${sourcesSectionHtml()}${actionsSectionHtml()}`;
 
     bindRangeSection(pane);
+    bindShootSection(pane);
     bindSourcesSection(pane);
     pane.querySelector('.jnk-go').addEventListener('click', onGoClick);
 
@@ -585,6 +713,7 @@ function renderArchive() {
 
     pane.innerHTML = `<div class="jnk-archive-list">${items.map((item) => {
         const meta = [
+            formatLabel(item.format, item.venue),
             item.range ? `Сообщения ${item.range.from}–${item.range.to}` : (String(item.text || '').trim() ? '' : 'Пустая тестовая запись'),
             formatDate(item.createdAt),
         ].filter(Boolean).join(' · ');
