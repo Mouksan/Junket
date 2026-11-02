@@ -98,7 +98,7 @@ function buildWindow() {
     overlay.innerHTML = `
         <div class="jnk-window" role="dialog" aria-label="Junket">
             <div class="jnk-header">
-                <div class="jnk-title"><i class="fa-solid fa-clapperboard"></i><span>Junket</span></div>
+                <div class="jnk-title"><i class="fa-solid fa-clapperboard"></i><span>「 JUNKET 」</span></div>
                 <div class="jnk-chatname"></div>
                 <button class="jnk-close" type="button" title="Закрыть"><i class="fa-solid fa-xmark"></i></button>
             </div>
@@ -282,7 +282,7 @@ function addSettingsDrawer() {
     wrap.innerHTML = `
         <div class="inline-drawer">
             <div class="inline-drawer-toggle inline-drawer-header">
-                <b><i class="fa-solid fa-clapperboard"></i> Junket</b>
+                <b><i class="fa-solid fa-clapperboard" style="margin-right: 6px;"></i>「 JUNKET 」</b>
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
             </div>
             <div class="inline-drawer-content">
