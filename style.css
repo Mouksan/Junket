@@ -467,17 +467,6 @@
     opacity: 0.75;
 }
 
-.jnk-result {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    margin-top: 14px;
-}
-
-.jnk-result:empty {
-    display: none;
-}
-
 /* Архив: список и просмотр */
 
 .jnk-archive-item {
@@ -526,10 +515,6 @@
     display: flex;
     flex-direction: column;
     gap: 16px;
-}
-
-.jnk-result .jnk-iv {
-    padding-top: 6px;
 }
 
 .jnk-iv-head {
@@ -774,6 +759,16 @@
     margin-left: 4px;
     padding-left: 10px;
     border-left: 2px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 35%, transparent);
+}
+
+/* ПК: окно пошире и фиксированной высоты, прокручивается только содержимое */
+
+@media (min-width: 1001px) {
+    .jnk-window {
+        width: 70vw;
+        height: 82vh;
+        max-height: 82vh;
+    }
 }
 
 /* Телефон */

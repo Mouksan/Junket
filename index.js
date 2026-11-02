@@ -420,15 +420,13 @@ async function renderLoreSummary() {
 // ---------- Генерация ----------
 
 let generation = null;           // { controller, chatId } пока идёт запрос
-const lastShown = new Map();     // chatId → id последнего снятого интервью (показываем под кнопкой)
 
 function actionsSectionHtml() {
     return `
         <div class="jnk-actions">
             <button class="jnk-go" type="button"></button>
             <span class="jnk-status"></span>
-        </div>
-        <div class="jnk-result"></div>`;
+        </div>`;
 }
 
 function updateGoButton() {
@@ -441,15 +439,6 @@ function updateGoButton() {
     btn.innerHTML = running ? '<i class="fa-solid fa-stop"></i> Стоп' : 'Мотор! 🎬';
     btn.disabled = !running && !getSelectedRange();
     if (status) status.innerHTML = running ? '<i class="fa-solid fa-spinner fa-spin"></i> Снимаем…' : '';
-}
-
-function renderResult() {
-    if (!overlayEl) return;
-    const box = overlayEl.querySelector('.jnk-result');
-    if (!box) return;
-    const id = lastShown.get(currentChatId());
-    const item = id ? getChatStore()?.interviews.find((i) => i.id === id) : null;
-    box.innerHTML = item ? renderInterviewHtml(item) : '';
 }
 
 function updateSinceLastChip() {
@@ -483,6 +472,7 @@ async function onGoClick() {
     const store = getChatStore();
     const controller = new AbortController();
     generation = { controller, chatId };
+    let savedId = null;
     updateGoButton();
 
     try {
@@ -510,7 +500,10 @@ async function onGoClick() {
         if (saveTo && currentChatId() === chatId) {
             saveTo.interviews.unshift(item);
             await saveChatStore();
-            lastShown.set(chatId, item.id);
+            savedId = item.id;
+            // Готовое интервью сразу открывается в архиве (и при следующем открытии окна тоже)
+            archiveOpenId = item.id;
+            activeTab = 'archive';
         }
         if (sources.droppedEntries) {
             toastr.warning(`Лорбуки не влезли в лимит, отрезано записей: ${sources.droppedEntries}`, TOAST_TITLE);
@@ -528,9 +521,12 @@ async function onGoClick() {
         if (isOpen()) {
             updateGoButton();
             if (currentChatId() === chatId) {
-                renderResult();
                 updateSinceLastChip();
                 renderArchive();
+                if (savedId) {
+                    renderTabs();
+                    overlayEl.querySelector('.jnk-body')?.scrollTo?.({ top: 0 });
+                }
             }
         }
     }
@@ -553,7 +549,6 @@ function renderNewPane() {
     pane.querySelector('.jnk-go').addEventListener('click', onGoClick);
 
     renderPreview();
-    renderResult();
 }
 
 function onChatMessagesChanged() {
@@ -679,7 +674,6 @@ async function deleteInterview(id) {
     await saveChatStore();
     if (archiveOpenId === id) archiveOpenId = null;
     renderArchive();
-    renderResult();
     updateSinceLastChip();
 }
 
