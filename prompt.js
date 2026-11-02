@@ -1,5 +1,5 @@
 // Junket — промпт интервью.
-// Этап 3: базовый вариант — джанкет, 6 вопросов, болтовня «Немного», актёры, русский.
+// Этап 3–4: базовый вариант + заголовок [TITLE] — джанкет, 6 вопросов, болтовня «Немного», актёры, русский.
 // Форматы, вайбы, банк вопросов и кастинг подключатся на этапе 5.
 
 import { getCharacterNames, getUserName } from './sources.js';
@@ -39,12 +39,14 @@ Banter: light. The interviewer may occasionally follow up on an answer, and the 
 Several actors may answer the same question.
 
 OUTPUT MARKUP (strict)
-Every turn starts on a new line with a tag:
+The first line is the headline:
+[TITLE] a catchy magazine-style headline for this interview in ${BASE.language}; it may quote a memorable line from the interview
+Then every turn starts on a new line with a tag:
 [Q] the interviewer's question or remark
 [A: Actor Name (Character Name)] an actor's answer — Character Name exactly as listed in WHO IS INTERVIEWED
 A turn may span several paragraphs until the next tag.
 Stage directions go in *asterisks* inside a turn: *laughs*, *covers face with both hands*. Emoji are allowed sparingly inside stage directions.
-Start immediately with the first [Q] line. No title, no preamble, no closing notes.
+Start immediately with the [TITLE] line. No preamble, no closing notes.
 
 NAMES
 - In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: Actor Name (${characters[0] || user})]. Never translate, transliterate or decline it.

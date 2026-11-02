@@ -148,12 +148,12 @@ async function requestCustomEndpoint({ instruction, contextText, prefill, maxTok
 
 /** Срезает рассуждения, обёртку ``` и вступление модели («Okay, here is…»). */
 export function stripPreamble(text) {
-    let out = String(text || '').trim();
+    let out = String(text || '').replace(/\r\n?/g, '\n').trim();
     out = out.replace(/<(think|thinking|reasoning|thought|rp_preflight)>[\s\S]*?<\/\1>/gi, '').trim();
     out = out.replace(/^[\s\S]*?<\/(?:think|thinking|reasoning|thought|rp_preflight)>/i, '').trim();
     out = out.replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/, '').trim();
     // Всё, что до первой реплики интервью, — вступление модели.
-    const firstTag = out.search(/^\s*\[(?:Q|A)\b/im);
+    const firstTag = out.search(/^\s*\[(?:TITLE|Q|A)\b/im);
     if (firstTag > 0) out = out.slice(firstTag).trim();
     return out;
 }

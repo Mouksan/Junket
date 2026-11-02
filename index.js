@@ -2,6 +2,7 @@
 // Этап 1: фундамент — окно, вкладки, архив интервью у каждого чата свой
 // Этап 2: выбор диапазона сообщений с превью
 // Этап 3: подключение к модели, «Что знает модель», первая сырая генерация
+// Этап 4: журнальная вёрстка интервью и архив
 
 import {
     ctx, getSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
@@ -14,6 +15,7 @@ import {
 import { buildInterviewPrompt } from './prompt.js';
 import { requestModel } from './connection.js';
 import { addSettingsDrawer } from './settings.js';
+import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle } from './render.js';
 
 // ---------- Окно ----------
 
@@ -418,7 +420,7 @@ async function renderLoreSummary() {
 // ---------- Генерация ----------
 
 let generation = null;           // { controller, chatId } пока идёт запрос
-const rawResults = new Map();    // chatId → { text, from, to } — сырой ответ, живёт до перезагрузки
+const lastShown = new Map();     // chatId → id последнего снятого интервью (показываем под кнопкой)
 
 function actionsSectionHtml() {
     return `
@@ -445,15 +447,18 @@ function renderResult() {
     if (!overlayEl) return;
     const box = overlayEl.querySelector('.jnk-result');
     if (!box) return;
-    const result = rawResults.get(currentChatId());
-    if (!result) {
-        box.innerHTML = '';
-        return;
-    }
-    box.innerHTML = `
-        <div class="jnk-section-title">Сырой ответ модели</div>
-        <div class="jnk-hint">Сообщения ${result.from}–${result.to} · красивый вид будет на этапе 4</div>
-        <pre class="jnk-raw">${escapeHtml(result.text)}</pre>`;
+    const id = lastShown.get(currentChatId());
+    const item = id ? getChatStore()?.interviews.find((i) => i.id === id) : null;
+    box.innerHTML = item ? renderInterviewHtml(item) : '';
+}
+
+function updateSinceLastChip() {
+    if (!overlayEl) return;
+    const chip = overlayEl.querySelector('.jnk-since-last');
+    if (!chip) return;
+    const has = lastInterviewRangeEnd() !== null;
+    chip.disabled = !has;
+    chip.title = has ? '' : 'В этом чате ещё не было интервью';
 }
 
 async function onGoClick() {
@@ -492,11 +497,25 @@ async function onGoClick() {
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
         if (!text.trim()) throw new Error('Модель вернула пустой ответ — попробуй ещё раз или увеличь лимит токенов ответа.');
 
-        rawResults.set(chatId, { text, ...range });
+        // Сразу в архив чата: храним сырой текст, вёрстка собирается при показе
+        const parsed = parseInterview(text);
+        const item = {
+            id: makeId(),
+            createdAt: Date.now(),
+            title: parsed.title || defaultTitle(range),
+            range: { from: range.from, to: range.to },
+            text,
+        };
+        const saveTo = getChatStore();
+        if (saveTo && currentChatId() === chatId) {
+            saveTo.interviews.unshift(item);
+            await saveChatStore();
+            lastShown.set(chatId, item.id);
+        }
         if (sources.droppedEntries) {
             toastr.warning(`Лорбуки не влезли в лимит, отрезано записей: ${sources.droppedEntries}`, TOAST_TITLE);
         }
-        toastr.success('Интервью снято 🎬', TOAST_TITLE);
+        toastr.success('Интервью снято и лежит в архиве 🎬', TOAST_TITLE);
     } catch (error) {
         if (controller.signal.aborted || error?.name === 'AbortError') {
             if (!controller.junketQuiet) toastr.info('Генерация остановлена', TOAST_TITLE);
@@ -508,7 +527,11 @@ async function onGoClick() {
         if (generation?.controller === controller) generation = null;
         if (isOpen()) {
             updateGoButton();
-            if (currentChatId() === chatId) renderResult();
+            if (currentChatId() === chatId) {
+                renderResult();
+                updateSinceLastChip();
+                renderArchive();
+            }
         }
     }
 }
@@ -540,6 +563,8 @@ function onChatMessagesChanged() {
 
 // ---------- Архив ----------
 
+let archiveOpenId = null;   // какое интервью открыто в архиве (null — список)
+
 function renderArchive() {
     if (!overlayEl) return;
     const pane = overlayEl.querySelector('[data-pane="archive"]');
@@ -550,53 +575,97 @@ function renderArchive() {
         return;
     }
 
+    const opened = archiveOpenId ? store.interviews.find((item) => item.id === archiveOpenId) : null;
+    if (opened) {
+        renderArchiveViewer(pane, opened);
+        return;
+    }
+    archiveOpenId = null;
+
     const items = store.interviews;
-    const listHtml = items.length
-        ? items.map((item) => `
-            <div class="jnk-archive-item" data-id="${escapeHtml(item.id)}">
+    if (!items.length) {
+        pane.innerHTML = `<div class="jnk-empty">В этом чате ещё не было интервью.<br><span class="jnk-muted">Сними первое на вкладке «Новое интервью» 🎬</span></div>`;
+        return;
+    }
+
+    pane.innerHTML = `<div class="jnk-archive-list">${items.map((item) => {
+        const meta = [
+            item.range ? `Сообщения ${item.range.from}–${item.range.to}` : (String(item.text || '').trim() ? '' : 'Пустая тестовая запись'),
+            formatDate(item.createdAt),
+        ].filter(Boolean).join(' · ');
+        return `
+            <div class="jnk-archive-item" data-id="${escapeHtml(item.id)}" tabindex="0" role="button">
                 <div class="jnk-archive-main">
-                    <div class="jnk-archive-title">${escapeHtml(item.title || 'Без названия')}</div>
-                    <div class="jnk-archive-meta">
-                        ${item.range ? `Сообщения ${escapeHtml(item.range.from)}–${escapeHtml(item.range.to)} · ` : ''}${escapeHtml(formatDate(item.createdAt))}
-                    </div>
+                    <div class="jnk-archive-title">${escapeHtml(item.title || defaultTitle(item.range))}</div>
+                    <div class="jnk-archive-meta">${escapeHtml(meta)}</div>
                 </div>
                 <button class="jnk-icon-btn jnk-delete" type="button" title="Удалить из архива">
                     <i class="fa-solid fa-trash-can"></i>
                 </button>
-            </div>`).join('')
-        : `<div class="jnk-empty">В этом чате ещё не было интервью.<br><span class="jnk-muted">Сними первое на вкладке «Новое интервью» 🎬</span></div>`;
+            </div>`;
+    }).join('')}</div>`;
 
-    pane.innerHTML = `
-        <div class="jnk-archive-list">${listHtml}</div>
-        <div class="jnk-devbar">
-            <button class="jnk-btn jnk-test-add" type="button">🧪 Добавить тестовую запись</button>
-            <span class="jnk-muted">Временная кнопка для проверки, уберём на этапе 4.</span>
-        </div>`;
-
-    pane.querySelectorAll('.jnk-delete').forEach((btn) => {
-        btn.addEventListener('click', () => {
-            const id = btn.closest('.jnk-archive-item')?.dataset.id;
-            if (id) deleteInterview(id);
+    pane.querySelectorAll('.jnk-archive-item').forEach((row) => {
+        const open = () => {
+            archiveOpenId = row.dataset.id;
+            renderArchive();
+            pane.scrollIntoView?.({ block: 'start' });
+        };
+        row.addEventListener('click', (e) => {
+            if (e.target.closest('.jnk-delete')) return;
+            open();
         });
+        row.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') open();
+        });
+        row.querySelector('.jnk-delete').addEventListener('click', () => deleteInterview(row.dataset.id));
     });
-    pane.querySelector('.jnk-test-add').addEventListener('click', addTestRecord);
 }
 
-async function addTestRecord() {
-    const store = getChatStore();
-    if (!store) return;
-    const n = store.interviews.length + 1;
-    store.interviews.unshift({
-        id: makeId(),
-        createdAt: Date.now(),
-        title: `Тестовое интервью №${n}`,
-        range: null,
-        test: true,
-        text: '',
+function renderArchiveViewer(pane, item) {
+    pane.innerHTML = `
+        <div class="jnk-viewer-bar">
+            <button class="jnk-btn jnk-back" type="button"><i class="fa-solid fa-arrow-left"></i> Все интервью</button>
+            <div class="jnk-viewer-actions">
+                <button class="jnk-btn jnk-copy" type="button"><i class="fa-regular fa-copy"></i> Скопировать</button>
+                <button class="jnk-btn jnk-btn-danger jnk-remove" type="button"><i class="fa-solid fa-trash-can"></i> Удалить</button>
+            </div>
+        </div>
+        ${renderInterviewHtml(item)}`;
+
+    pane.querySelector('.jnk-back').addEventListener('click', () => {
+        archiveOpenId = null;
+        renderArchive();
     });
-    await saveChatStore();
-    renderArchive();
-    toastr.success('Тестовая запись добавлена в этот чат', TOAST_TITLE);
+    pane.querySelector('.jnk-copy').addEventListener('click', async () => {
+        const ok = await copyToClipboard(interviewPlainText(item));
+        if (ok) toastr.success('Интервью скопировано', TOAST_TITLE);
+        else toastr.error('Не получилось скопировать', TOAST_TITLE);
+    });
+    pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
+}
+
+async function copyToClipboard(text) {
+    try {
+        await navigator.clipboard.writeText(text);
+        return true;
+    } catch {
+        // Запасной путь для браузеров без доступа к буферу
+        const area = document.createElement('textarea');
+        area.value = text;
+        area.style.position = 'fixed';
+        area.style.opacity = '0';
+        document.body.appendChild(area);
+        area.select();
+        let ok = false;
+        try {
+            ok = document.execCommand('copy');
+        } catch {
+            ok = false;
+        }
+        area.remove();
+        return ok;
+    }
 }
 
 async function deleteInterview(id) {
@@ -608,7 +677,10 @@ async function deleteInterview(id) {
     if (index === -1) return;
     store.interviews.splice(index, 1);
     await saveChatStore();
+    if (archiveOpenId === id) archiveOpenId = null;
     renderArchive();
+    renderResult();
+    updateSinceLastChip();
 }
 
 // ---------- Встраивание в таверну ----------
@@ -635,6 +707,7 @@ function onChatChanged() {
         toastr.info('Генерация остановлена: сменился чат', TOAST_TITLE);
     }
     resetLoreTokenCache();
+    archiveOpenId = null;
     // Окно открыто — перерисовываем под новый чат, иначе ничего не делаем
     if (isOpen()) renderAll();
 }

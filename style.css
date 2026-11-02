@@ -179,18 +179,6 @@
     opacity: 0.6;
 }
 
-/* Временная панель для проверки (уйдёт на этапе 4) */
-
-.jnk-devbar {
-    display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 10px;
-    margin-top: 16px;
-    padding-top: 12px;
-    border-top: 1px dashed var(--SmartThemeBorderColor);
-}
-
 .jnk-btn {
     padding: 6px 12px;
     color: inherit;
@@ -490,19 +478,166 @@
     display: none;
 }
 
-.jnk-raw {
+/* Архив: список и просмотр */
+
+.jnk-archive-item {
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.jnk-archive-item:hover,
+.jnk-archive-item:focus-visible {
+    border-color: var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, transparent);
+    outline: none;
+}
+
+.jnk-archive-title {
+    white-space: normal;
+}
+
+.jnk-viewer-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.jnk-viewer-actions {
+    display: flex;
+    gap: 6px;
+}
+
+.jnk-btn i {
+    margin-right: 4px;
+}
+
+.jnk-btn-danger:hover {
+    color: #fff;
+    background: #b85450;
+    border-color: #b85450;
+}
+
+/* Интервью: журнальная вёрстка */
+
+.jnk-iv {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.jnk-result .jnk-iv {
+    padding-top: 6px;
+}
+
+.jnk-iv-head {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+.jnk-iv-title {
     margin: 0;
-    padding: 12px;
-    max-height: 420px;
-    overflow-y: auto;
-    white-space: pre-wrap;
-    word-break: break-word;
-    font-family: inherit;
-    font-size: 0.9em;
-    line-height: 1.5;
-    border: 1px solid var(--SmartThemeBorderColor);
-    border-radius: 10px;
-    background: rgba(127, 127, 127, 0.06);
+    font-size: 1.3em;
+    font-weight: 800;
+    line-height: 1.3;
+}
+
+.jnk-iv-meta {
+    margin-top: 6px;
+    font-size: 0.8em;
+    opacity: 0.55;
+}
+
+.jnk-iv-turns {
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+}
+
+.jnk-iv-text p {
+    margin: 0 0 0.6em;
+    line-height: 1.6;
+}
+
+.jnk-iv-text p:last-child {
+    margin-bottom: 0;
+}
+
+.jnk-dir {
+    font-style: italic;
+    opacity: 0.65;
+}
+
+.jnk-iv-q {
+    padding: 10px 14px;
+    border-left: 3px solid var(--SmartThemeQuoteColor);
+    border-radius: 0 10px 10px 0;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 8%, transparent);
+}
+
+.jnk-iv-q-label {
+    margin-bottom: 4px;
+    font-size: 0.78em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.6;
+}
+
+.jnk-iv-q .jnk-iv-text {
+    font-weight: 500;
+}
+
+.jnk-iv-speaker {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 6px;
+}
+
+.jnk-iv-avatar {
+    flex-shrink: 0;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    object-fit: cover;
+    box-shadow: 0 0 0 2px var(--jnk-speaker);
+}
+
+.jnk-iv-initial {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #fff;
+    font-weight: 700;
+}
+
+.jnk-iv-actor {
+    color: var(--jnk-speaker);
+    font-weight: 800;
+    font-size: 1.02em;
+}
+
+.jnk-iv-role {
+    font-size: 0.82em;
+    opacity: 0.5;
+}
+
+.jnk-iv-a .jnk-iv-text {
+    padding-left: 46px;
+}
+
+.jnk-iv-plain p {
+    margin: 0 0 0.6em;
+    line-height: 1.6;
+}
+
+@media (max-width: 600px) {
+    .jnk-iv-a .jnk-iv-text {
+        padding-left: 0;
+    }
 }
 
 /* Ящик расширений — по образцу Koma */
