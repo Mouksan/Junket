@@ -1,5 +1,6 @@
 // Junket — интервью персонажей как актёров
 // Этап 1: фундамент — окно, вкладки, архив интервью у каждого чата свой
+// Этап 2: выбор диапазона сообщений с превью
 
 const MODULE = 'junket';     // ключ в extension_settings
 const META_KEY = 'junket';   // ключ в метаданных чата
@@ -184,6 +185,145 @@ function renderTabs() {
     });
 }
 
+// ---------- Выбор сообщений ----------
+
+const QUICK_LAST = [10, 20];          // кнопки «Последние N»
+const PREVIEW_CHARS = 120;            // сколько символов показывать в превью
+const PREVIEW_COLLAPSE_AFTER = 40;    // длиннее — показываем начало и конец, середину сворачиваем
+const PREVIEW_EDGE = 15;              // сколько сообщений показывать с каждого края при сворачивании
+
+// Черновик диапазона для каждого чата (живёт до перезагрузки страницы)
+const rangeDrafts = new Map();
+
+function getChatMessages() {
+    return ctx().chat || [];
+}
+
+function lastIndex() {
+    return getChatMessages().length - 1;
+}
+
+function defaultRange() {
+    const last = lastIndex();
+    if (last < 0) return { from: '', to: '' };
+    return { from: Math.max(0, last - (QUICK_LAST[0] - 1)), to: last };
+}
+
+function getDraft() {
+    const chatId = currentChatId();
+    if (!chatId) return { from: '', to: '' };
+    if (!rangeDrafts.has(chatId)) rangeDrafts.set(chatId, defaultRange());
+    return rangeDrafts.get(chatId);
+}
+
+function setDraft(from, to) {
+    const chatId = currentChatId();
+    if (!chatId) return;
+    rangeDrafts.set(chatId, { from, to });
+}
+
+function parseIndex(value) {
+    if (value === '' || value === null || value === undefined) return null;
+    const n = Number(value);
+    return Number.isInteger(n) ? n : NaN;
+}
+
+// Проверка диапазона: возвращает { ok, from, to, error }
+function validateRange(draft) {
+    const last = lastIndex();
+    if (last < 0) return { ok: false, error: 'В этом чате пока нет сообщений.' };
+
+    const from = parseIndex(draft.from);
+    const to = parseIndex(draft.to);
+
+    if (from === null || to === null) return { ok: false, error: 'Укажи, с какого и по какое сообщение.' };
+    if (Number.isNaN(from) || Number.isNaN(to)) return { ok: false, error: 'Номера сообщений — целые числа.' };
+    if (from < 0 || to < 0 || from > last || to > last) {
+        return { ok: false, error: `В этом чате сообщения с 0 по ${last}.` };
+    }
+    if (from > to) return { ok: false, error: '«С» должно быть не больше, чем «По».' };
+
+    return { ok: true, from, to };
+}
+
+// Готовый диапазон для генерации (понадобится на этапе 3); null, если выбран неверно
+function getSelectedRange() {
+    const result = validateRange(getDraft());
+    return result.ok ? { from: result.from, to: result.to } : null;
+}
+
+function lastInterviewRangeEnd() {
+    const store = getChatStore();
+    if (!store) return null;
+    const withRange = store.interviews.filter((item) => item.range && Number.isInteger(item.range.to));
+    if (!withRange.length) return null;
+    return Math.max(...withRange.map((item) => item.range.to));
+}
+
+function cleanPreviewText(text) {
+    return String(text ?? '')
+        .replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, ' ')
+        .replace(/<[^>]*>/g, ' ')
+        .replace(/[*_~`]+/g, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+}
+
+function previewRowHtml(index) {
+    const msg = getChatMessages()[index];
+    if (!msg) return '';
+    const text = cleanPreviewText(msg.mes);
+    const short = text.length > PREVIEW_CHARS ? `${text.slice(0, PREVIEW_CHARS).trimEnd()}…` : (text || '(пусто)');
+    const who = msg.is_user ? 'jnk-from-user' : 'jnk-from-char';
+    const hidden = msg.is_system ? '<span class="jnk-badge" title="Сообщение скрыто от модели в самом чате">скрыто</span>' : '';
+    return `
+        <div class="jnk-preview-row ${who}">
+            <span class="jnk-preview-id">#${index}</span>
+            <span class="jnk-preview-name">${escapeHtml(msg.name || '???')}</span>${hidden}
+            <span class="jnk-preview-text">${escapeHtml(short)}</span>
+        </div>`;
+}
+
+function renderPreview() {
+    if (!overlayEl) return;
+    const box = overlayEl.querySelector('.jnk-preview');
+    const summary = overlayEl.querySelector('.jnk-range-summary');
+    if (!box || !summary) return;
+
+    const result = validateRange(getDraft());
+    if (!result.ok) {
+        summary.innerHTML = `<span class="jnk-error">${escapeHtml(result.error)}</span>`;
+        box.innerHTML = '';
+        box.classList.add('jnk-hidden');
+        return;
+    }
+
+    const { from, to } = result;
+    const count = to - from + 1;
+    summary.textContent = `Выбрано сообщений: ${count}`;
+
+    let rows = '';
+    if (count > PREVIEW_COLLAPSE_AFTER) {
+        for (let i = from; i < from + PREVIEW_EDGE; i++) rows += previewRowHtml(i);
+        rows += `<div class="jnk-preview-gap">… ещё ${count - PREVIEW_EDGE * 2} сообщ. посередине …</div>`;
+        for (let i = to - PREVIEW_EDGE + 1; i <= to; i++) rows += previewRowHtml(i);
+    } else {
+        for (let i = from; i <= to; i++) rows += previewRowHtml(i);
+    }
+    box.innerHTML = rows;
+    box.classList.remove('jnk-hidden');
+}
+
+function applyRange(from, to) {
+    setDraft(from, to);
+    if (!overlayEl) return;
+    const fromInput = overlayEl.querySelector('.jnk-range-from');
+    const toInput = overlayEl.querySelector('.jnk-range-to');
+    if (fromInput) fromInput.value = from;
+    if (toInput) toInput.value = to;
+    renderPreview();
+}
+
 function renderNewPane() {
     if (!overlayEl) return;
     const pane = overlayEl.querySelector('[data-pane="new"]');
@@ -191,11 +331,75 @@ function renderNewPane() {
         pane.innerHTML = `<div class="jnk-empty">Открой чат, чтобы снять интервью по его сценам 🎬</div>`;
         return;
     }
+
+    const draft = getDraft();
+    const sinceLast = lastInterviewRangeEnd();
+    const quickButtons = QUICK_LAST
+        .map((n) => `<button class="jnk-chip" type="button" data-last="${n}">Последние ${n}</button>`)
+        .join('');
+
     pane.innerHTML = `
-        <div class="jnk-empty">
-            Здесь будет площадка: выбор сообщений, источники, формат и вайбы.<br>
-            <span class="jnk-muted">Появится на следующем этапе.</span>
+        <div class="jnk-section">
+            <div class="jnk-section-title">Какие сообщения</div>
+            <div class="jnk-range-row">
+                <label class="jnk-range-field">
+                    <span>С</span>
+                    <input class="jnk-range-from text_pole" type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(draft.from)}">
+                </label>
+                <label class="jnk-range-field">
+                    <span>По</span>
+                    <input class="jnk-range-to text_pole" type="number" min="0" step="1" inputmode="numeric" value="${escapeHtml(draft.to)}">
+                </label>
+            </div>
+            <div class="jnk-chips">
+                ${quickButtons}
+                <button class="jnk-chip jnk-since-last" type="button" ${sinceLast === null ? 'disabled title="В этом чате ещё не было интервью"' : ''}>С прошлого интервью</button>
+            </div>
+            <div class="jnk-hint">Номера — как у сообщений в таверне (#520).</div>
+            <div class="jnk-range-summary"></div>
+            <div class="jnk-preview jnk-hidden"></div>
+        </div>
+        <div class="jnk-empty jnk-later">
+            Источники, формат и вайбы появятся на следующем этапе.
         </div>`;
+
+    const fromInput = pane.querySelector('.jnk-range-from');
+    const toInput = pane.querySelector('.jnk-range-to');
+    let typingTimer = null;
+    const onType = () => {
+        setDraft(fromInput.value, toInput.value);
+        clearTimeout(typingTimer);
+        typingTimer = setTimeout(renderPreview, 250);
+    };
+    fromInput.addEventListener('input', onType);
+    toInput.addEventListener('input', onType);
+
+    pane.querySelectorAll('[data-last]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const last = lastIndex();
+            if (last < 0) return;
+            const n = Number(btn.dataset.last);
+            applyRange(Math.max(0, last - n + 1), last);
+        });
+    });
+
+    pane.querySelector('.jnk-since-last').addEventListener('click', () => {
+        const end = lastInterviewRangeEnd();
+        const last = lastIndex();
+        if (end === null || last < 0) return;
+        if (end >= last) {
+            toastr.info('После прошлого интервью новых сообщений ещё нет');
+            return;
+        }
+        applyRange(end + 1, last);
+    });
+
+    renderPreview();
+}
+
+function onChatMessagesChanged() {
+    // Новое/удалённое/изменённое сообщение — освежаем превью, если окно открыто
+    if (isOpen()) renderPreview();
 }
 
 function renderArchive() {
@@ -321,4 +525,8 @@ jQuery(async () => {
 
     const { eventSource, event_types } = ctx();
     eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
+
+    for (const key of ['MESSAGE_RECEIVED', 'MESSAGE_SENT', 'MESSAGE_DELETED', 'MESSAGE_EDITED', 'MESSAGE_SWIPED']) {
+        if (event_types[key]) eventSource.on(event_types[key], onChatMessagesChanged);
+    }
 });
