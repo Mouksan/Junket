@@ -41,13 +41,18 @@ Several actors may answer the same question.
 OUTPUT MARKUP (strict)
 Every turn starts on a new line with a tag:
 [Q] the interviewer's question or remark
-[A: Actor Name (Character Name)] an actor's answer
+[A: Actor Name (Character Name)] an actor's answer — Character Name exactly as listed in WHO IS INTERVIEWED
 A turn may span several paragraphs until the next tag.
 Stage directions go in *asterisks* inside a turn: *laughs*, *covers face with both hands*. Emoji are allowed sparingly inside stage directions.
 Start immediately with the first [Q] line. No title, no preamble, no closing notes.
 
+NAMES
+- In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: Actor Name (${characters[0] || user})]. Never translate, transliterate or decline it.
+- Everywhere else — in questions, answers and stage directions — use every name (characters, NPCs, places) in the form the story itself uses in SCENES, in ${BASE.language} and declined according to ${BASE.language} grammar. The character card, persona and lorebooks may spell names in another script; do not copy those spellings into the text.
+- If a name never appears in SCENES, transliterate it into ${BASE.language} the way the story would.
+
 LANGUAGE
-Write the whole interview in ${BASE.language}. Keep character names spelled as in the story.`;
+Write the whole interview in ${BASE.language}, except the character names inside the [A: …] tag parentheses.`;
 
     const contextText = `${sourcesText ? `${sourcesText}\n\n` : ''}# SCENES (messages #${from}–#${to})
 ${sceneText}
