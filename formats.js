@@ -129,6 +129,12 @@ export const VIBES = [
     },
 ];
 
+// Кто в студии: актёры (с кастом) или сами персонажи
+export const STUDIO = [
+    { id: 'actors', label: 'Актёры' },
+    { id: 'characters', label: 'Персонажи' },
+];
+
 export const QUESTIONS_MIN = 3;
 export const QUESTIONS_MAX = 15;
 
@@ -158,6 +164,8 @@ export function defaultShoot() {
         banter: 'light',
         vibes: { chemistry: null, interviewer: null, rating: null },
         wishes: '',
+        studio: 'actors',
+        guests: [],     // id НПС из каста, позванных в это интервью
     };
 }
 
@@ -181,6 +189,8 @@ export function normalizeShoot(saved) {
         banter: BANTER.some((b) => b.id === s.banter) ? s.banter : base.banter,
         vibes,
         wishes: typeof s.wishes === 'string' ? s.wishes : '',
+        studio: STUDIO.some((x) => x.id === s.studio) ? s.studio : base.studio,
+        guests: Array.isArray(s.guests) ? s.guests.filter((g) => typeof g === 'string') : [],
     };
 }
 

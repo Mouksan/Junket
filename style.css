@@ -405,6 +405,89 @@
     resize: vertical;
 }
 
+/* Кто в студии */
+
+.jnk-studio {
+    max-width: 280px;
+}
+
+.jnk-guests {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px 10px;
+}
+
+/* Вкладка «Кастинг» */
+
+.jnk-cast-intro {
+    margin-bottom: 14px;
+}
+
+.jnk-cast-npcs {
+    margin-top: 20px;
+}
+
+.jnk-cast-list {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.jnk-cast-row {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    padding: 10px 12px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background: rgba(127, 127, 127, 0.05);
+}
+
+.jnk-cast-who {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.jnk-cast-who .jnk-iv-avatar {
+    box-shadow: none;
+}
+
+.jnk-cast-role {
+    font-weight: 700;
+}
+
+.jnk-cast-fields {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 8px 12px;
+}
+
+.jnk-cast-field {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1 1 180px;
+    min-width: 0;
+    margin: 0;
+}
+
+.jnk-cast-notes {
+    flex: 2 1 260px;
+}
+
+.jnk-cast-field span {
+    font-size: 0.8em;
+    opacity: 0.65;
+}
+
+.jnk-cast-field input {
+    width: 100%;
+    margin: 0;
+}
+
 /* Вкладка «Новое интервью»: что знает модель */
 
 .jnk-sources {

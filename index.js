@@ -4,6 +4,7 @@
 // Этап 3: подключение к модели, «Что знает модель», первая сырая генерация
 // Этап 4: журнальная вёрстка интервью и архив
 // Этап 5а: «Как снимаем» — формат, вопросы, болтовня, вайбы, пожелания
+// Этап 5б: кастинг — актёры и НПС в чате, «Кто в студии», «Закрепить каст»
 
 import {
     ctx, getSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
@@ -18,9 +19,10 @@ import { requestModel } from './connection.js';
 import { addSettingsDrawer } from './settings.js';
 import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle } from './render.js';
 import {
-    FORMATS, FAN_VENUES, BANTER, VIBES, QUESTIONS_MIN, QUESTIONS_MAX,
+    FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, QUESTIONS_MIN, QUESTIONS_MAX,
     getFormat, normalizeShoot, formatLabel,
 } from './formats.js';
+import { getMainRoles, normalizeCast, newNpc, invitableNpcs, castFromTurns, applyCast } from './cast.js';
 
 // ---------- Окно ----------
 
@@ -40,10 +42,12 @@ function buildWindow() {
             </div>
             <div class="jnk-tabs">
                 <button class="jnk-tab" type="button" data-tab="new">Новое интервью</button>
+                <button class="jnk-tab" type="button" data-tab="cast">Кастинг</button>
                 <button class="jnk-tab" type="button" data-tab="archive">Архив</button>
             </div>
             <div class="jnk-body">
                 <section class="jnk-pane" data-pane="new"></section>
+                <section class="jnk-pane" data-pane="cast"></section>
                 <section class="jnk-pane" data-pane="archive"></section>
             </div>
         </div>`;
@@ -94,6 +98,9 @@ function closeWindow() {
 function switchTab(tab) {
     activeTab = tab;
     renderTabs();
+    // Каст могли поменять — «Кто в студии» на новом интервью должен это увидеть
+    if (tab === 'new') renderNewPane();
+    if (tab === 'cast') renderCast();
     if (tab === 'archive') renderArchive();
 }
 
@@ -101,6 +108,7 @@ function renderAll() {
     renderHeader();
     renderTabs();
     renderNewPane();
+    renderCast();
     renderArchive();
 }
 
@@ -353,6 +361,12 @@ function shootSectionHtml() {
         <div class="jnk-section jnk-shoot">
             <div class="jnk-section-title">Как снимаем</div>
 
+            <div class="jnk-subtitle">Кто в студии</div>
+            <div class="jnk-seg jnk-studio">
+                ${STUDIO.map((x) => `<button type="button" class="jnk-seg-btn ${x.id === shoot.studio ? 'active' : ''}" data-studio="${x.id}">${escapeHtml(x.label)}</button>`).join('')}
+            </div>
+            ${guestChipsHtml(shoot)}
+
             <div class="jnk-subtitle">Формат</div>
             <div class="jnk-chips">${chipsHtml(FORMATS, shoot.format, 'data-format')}</div>
 
@@ -381,6 +395,22 @@ function shootSectionHtml() {
         </div>`;
 }
 
+function getCast() {
+    return normalizeCast(getChatStore()?.cast);
+}
+
+function guestChipsHtml(shoot) {
+    const npcs = invitableNpcs(getCast());
+    if (!npcs.length) return '';
+    return `
+        <div class="jnk-guests">
+            <span class="jnk-vibe-name">НПС в студию</span>
+            <div class="jnk-chips">
+                ${npcs.map((n) => `<button class="jnk-chip ${shoot.guests.includes(n.id) ? 'jnk-chip-on' : ''}" type="button" data-guest="${escapeHtml(n.id)}">${escapeHtml(n.name)}</button>`).join('')}
+            </div>
+        </div>`;
+}
+
 function bindShootSection(pane) {
     const section = pane.querySelector('.jnk-shoot');
     if (!section) return;
@@ -394,7 +424,15 @@ function bindShootSection(pane) {
         if (!btn) return;
         const shoot = getShoot();
 
-        if (btn.dataset.format) {
+        if (btn.dataset.studio) {
+            shoot.studio = btn.dataset.studio;
+            section.querySelectorAll('[data-studio]').forEach((b) => b.classList.toggle('active', b === btn));
+        } else if (btn.dataset.guest) {
+            const id = btn.dataset.guest;
+            const on = !shoot.guests.includes(id);
+            shoot.guests = on ? [...shoot.guests, id] : shoot.guests.filter((g) => g !== id);
+            btn.classList.toggle('jnk-chip-on', on);
+        } else if (btn.dataset.format) {
             shoot.format = btn.dataset.format;
             shoot.questions = getFormat(shoot.format).questions;
             setOn('[data-format]', btn);
@@ -607,7 +645,7 @@ async function onGoClick() {
         if (!sceneText) throw new Error('В выбранных сообщениях нет текста.');
 
         const shoot = getShoot();
-        const { instruction, contextText } = buildInterviewPrompt({ sourcesText: sources.text, sceneText, ...range, shoot });
+        const { instruction, contextText } = buildInterviewPrompt({ sourcesText: sources.text, sceneText, ...range, shoot, cast: getCast() });
         const text = await requestModel({ instruction, contextText }, controller.signal);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
         if (!text.trim()) throw new Error('Модель вернула пустой ответ — попробуй ещё раз или увеличь лимит токенов ответа.');
@@ -620,6 +658,7 @@ async function onGoClick() {
             title: parsed.title || defaultTitle(range),
             range: { from: range.from, to: range.to },
             format: shoot.format,
+            studio: shoot.studio,
             venue: shoot.format === 'fans' ? shoot.venue : null,
             text,
         };
@@ -682,6 +721,112 @@ function renderNewPane() {
 function onChatMessagesChanged() {
     // Новое/удалённое/изменённое сообщение — освежаем превью, если окно открыто
     if (isOpen()) renderPreview();
+}
+
+// ---------- Кастинг ----------
+
+function saveCast(cast) {
+    const store = getChatStore();
+    if (!store) return;
+    store.cast = cast;
+    saveChatStoreDebounced();
+}
+
+function castFieldsHtml(entry, { withName = false } = {}) {
+    return `
+        ${withName ? `
+        <label class="jnk-cast-field">
+            <span>Персонаж</span>
+            <input class="text_pole" data-field="name" type="text" placeholder="Как в сюжете, например: Эмин" value="${escapeHtml(entry.name)}">
+        </label>` : ''}
+        <label class="jnk-cast-field">
+            <span>Актёр</span>
+            <input class="text_pole" data-field="actor" type="text" placeholder="Пусто — модель придумает сама" value="${escapeHtml(entry.actor)}">
+        </label>
+        <label class="jnk-cast-field jnk-cast-notes">
+            <span>Каков в жизни</span>
+            <input class="text_pole" data-field="notes" type="text" placeholder="Например: в жизни булочка, вечно опаздывает, обожает лимоны" value="${escapeHtml(entry.notes)}">
+        </label>`;
+}
+
+function renderCast() {
+    if (!overlayEl) return;
+    const pane = overlayEl.querySelector('[data-pane="cast"]');
+    if (!getChatStore()) {
+        pane.innerHTML = `<div class="jnk-empty">Открой чат — у каждого чата свой каст.</div>`;
+        return;
+    }
+    const cast = getCast();
+    const roles = getMainRoles();
+
+    const mains = roles.map((role) => {
+        const entry = cast.mains[role.name] || { actor: '', notes: '' };
+        return `
+            <div class="jnk-cast-row" data-main="${escapeHtml(role.name)}">
+                <div class="jnk-cast-who">
+                    ${role.avatar ? `<img class="jnk-iv-avatar" src="${escapeHtml(role.avatar)}" alt="" loading="lazy">` : ''}
+                    <span class="jnk-cast-role">${escapeHtml(role.name)}</span>
+                    <span class="jnk-badge">${role.kind === 'persona' ? 'персона' : 'персонаж'}</span>
+                </div>
+                <div class="jnk-cast-fields">${castFieldsHtml(entry)}</div>
+            </div>`;
+    }).join('');
+
+    const npcs = cast.npcs.map((npc) => `
+        <div class="jnk-cast-row" data-npc="${escapeHtml(npc.id)}">
+            <div class="jnk-cast-fields">
+                ${castFieldsHtml(npc, { withName: true })}
+                <button class="jnk-icon-btn jnk-npc-delete" type="button" title="Убрать НПС из каста"><i class="fa-solid fa-trash-can"></i></button>
+            </div>
+        </div>`).join('');
+
+    pane.innerHTML = `
+        <div class="jnk-hint jnk-cast-intro">Каст у каждого чата свой. Заполненные имена важнее правила про национальность актёров.</div>
+        <div class="jnk-section">
+            <div class="jnk-section-title">Главные роли</div>
+            <div class="jnk-cast-list">${mains || '<div class="jnk-muted">В этом чате нет персонажей.</div>'}</div>
+        </div>
+        <div class="jnk-section jnk-cast-npcs">
+            <div class="jnk-section-title">НПС</div>
+            <div class="jnk-cast-list">${npcs}</div>
+            <div><button class="jnk-btn jnk-add-npc" type="button">+ Добавить НПС</button></div>
+        </div>`;
+
+    pane.oninput = onCastInput;
+    pane.querySelector('.jnk-add-npc').addEventListener('click', () => {
+        const c = getCast();
+        c.npcs.push(newNpc());
+        saveCast(c);
+        renderCast();
+        overlayEl.querySelector('[data-pane="cast"] [data-npc]:last-of-type [data-field="name"]')?.focus();
+    });
+    pane.querySelectorAll('.jnk-npc-delete').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            const id = btn.closest('[data-npc]').dataset.npc;
+            const c = getCast();
+            c.npcs = c.npcs.filter((n) => n.id !== id);
+            saveCast(c);
+            renderCast();
+        });
+    });
+}
+
+// Сохраняем на лету (oninput на панели — чтобы при перерисовке не копились слушатели)
+function onCastInput(e) {
+    const input = e.target.closest('[data-field]');
+    if (!input) return;
+    const row = input.closest('.jnk-cast-row');
+    const field = input.dataset.field;
+    const cast = getCast();
+    if (row.dataset.main !== undefined) {
+        const name = row.dataset.main;
+        cast.mains[name] = { ...(cast.mains[name] || { actor: '', notes: '' }), [field]: input.value };
+    } else {
+        const npc = cast.npcs.find((n) => n.id === row.dataset.npc);
+        if (!npc) return;
+        npc[field] = input.value;
+    }
+    saveCast(cast);
 }
 
 // ---------- Архив ----------
@@ -751,6 +896,7 @@ function renderArchiveViewer(pane, item) {
         <div class="jnk-viewer-bar">
             <button class="jnk-btn jnk-back" type="button"><i class="fa-solid fa-arrow-left"></i> Все интервью</button>
             <div class="jnk-viewer-actions">
+                ${item.studio === 'characters' || !String(item.text || '').trim() ? '' : '<button class="jnk-btn jnk-pin" type="button">📌 Закрепить каст</button>'}
                 <button class="jnk-btn jnk-copy" type="button"><i class="fa-regular fa-copy"></i> Скопировать</button>
                 <button class="jnk-btn jnk-btn-danger jnk-remove" type="button"><i class="fa-solid fa-trash-can"></i> Удалить</button>
             </div>
@@ -767,6 +913,21 @@ function renderArchiveViewer(pane, item) {
         else toastr.error('Не получилось скопировать', TOAST_TITLE);
     });
     pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
+    pane.querySelector('.jnk-pin')?.addEventListener('click', () => pinCast(item));
+}
+
+async function pinCast(item) {
+    const cast = getCast();
+    const found = castFromTurns(parseInterview(item.text).turns, cast);
+    const pairs = [...found.mains, ...found.npcs].map((p) => `${p.name} — ${p.actor}`);
+    if (!pairs.length) {
+        toastr.info('В этом интервью не нашлось актёров, которых можно закрепить', TOAST_TITLE);
+        return;
+    }
+    const ok = await confirmPopup(`Закрепить в касте: ${escapeHtml(pairs.join(', '))}?`);
+    if (!ok) return;
+    saveCast(applyCast(cast, found));
+    toastr.success('Каст закреплён', TOAST_TITLE);
 }
 
 async function copyToClipboard(text) {
