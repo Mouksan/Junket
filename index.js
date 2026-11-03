@@ -17,8 +17,9 @@ import {
 import {
     ACTIVE_KIND_LABELS, getLorebookList, resolveLoreSelection, getSourceFlags, storeSources,
     countLorebookTokens, resetLoreTokenCache, collectSources, buildSceneText,
+    collectBankSources, getChatLorebookName, BANK_RECENT_MESSAGES,
 } from './sources.js';
-import { buildInterviewPrompt, buildAudiencePrompt, buildFeedPrompt } from './prompt.js';
+import { buildInterviewPrompt, buildAudiencePrompt, buildFeedPrompt, buildBankPrompt } from './prompt.js';
 import {
     FEED_STYLES, FEED_COUNT_MIN, FEED_COUNT_MAX, getFeedStyle, loadFeedStyle, feedContract,
     parseComments, renderFeedHtml, feedPlainText,
@@ -32,7 +33,7 @@ import {
     getFormat, normalizeShoot, formatLabel, isReaction, WATCH_PLACES, MOMENTS_MAX,
 } from './formats.js';
 import { getMainRoles, normalizeCast, newNpc, invitableNpcs, castFromTurns, applyCast } from './cast.js';
-import { getBank, getList, listQuestions, addList, updateList, deleteList, questionsWord } from './bank.js';
+import { getBank, getList, listQuestions, addList, updateList, deleteList, questionsWord, parseGeneratedQuestions } from './bank.js';
 
 // ---------- Окно ----------
 
@@ -879,6 +880,123 @@ function onChatMessagesChanged() {
 
 let bankEditorEl = null;
 let bankEditorId = null;
+let bankCompose = false;      // справа открыта панель «Сочинить список»
+let bankGen = null;           // { controller, chatId } пока модель сочиняет
+let bankGenWishes = '';       // черновик пожеланий (живёт, пока открыта таверна)
+
+const BANK_GEN_MIN = 10;
+const BANK_GEN_MAX = 30;
+
+function bankComposeHtml() {
+    const s = getSettings();
+    if (!currentChatId()) return '<div class="jnk-empty">Открой чат — вопросы сочиняются по его карточке, персоне и лорбуку.</div>';
+    const running = Boolean(bankGen);
+    const lore = getChatLorebookName();
+    const samples = getBank().filter((l) => listQuestions(l).length);
+    return `
+        <div class="jnk-section-title">✨ Сочинить список</div>
+        <div class="jnk-hint">Модель прочитает карточку, персону и лорбук чата и придумает вопросы героям — от серьёзных и «если бы» до смешных и пошлых. Получится новый список: лишнее вычеркнешь.</div>
+        <div class="jnk-bank-gen-row">
+            <label class="jnk-cast-field jnk-bank-gen-count">
+                <span>Сколько вопросов</span>
+                <input class="text_pole" type="number" min="${BANK_GEN_MIN}" max="${BANK_GEN_MAX}" step="1" value="${escapeHtml(s.bankGenCount)}">
+            </label>
+            <label class="jnk-cast-field">
+                <span>Образец стиля</span>
+                <select class="text_pole jnk-bank-gen-sample">
+                    <option value="">— без образца —</option>
+                    ${samples.map((l) => `<option value="${escapeHtml(l.id)}" ${l.id === s.bankGenSample ? 'selected' : ''}>${escapeHtml(l.name || 'Без названия')}</option>`).join('')}
+                </select>
+            </label>
+        </div>
+        <label class="checkbox_label jnk-check">
+            <input type="checkbox" class="jnk-bank-gen-recent" ${s.bankGenRecent ? 'checked' : ''}>
+            <span>Последние ${BANK_RECENT_MESSAGES} сообщений чата</span>
+        </label>
+        <div class="jnk-hint">Свежие события, которых ещё нет в саммари. Это заметно больше контекста.</div>
+        <label class="jnk-cast-field jnk-bank-gen-wishes-field">
+            <span>Пожелания (необязательно)</span>
+            <textarea class="text_pole jnk-bank-gen-wishes" rows="3" placeholder="Например: побольше про беременность, без Кевы">${escapeHtml(bankGenWishes)}</textarea>
+        </label>
+        <div class="jnk-hint">${lore ? `Лорбук чата: «${escapeHtml(lore)}»` : 'Лорбук к чату не привязан — вопросы будут по карточке, персоне и сообщениям.'}</div>
+        <div class="jnk-actions">
+            <button class="jnk-go jnk-bank-gen-go ${running ? 'jnk-stop' : ''}" type="button">${running ? '<i class="fa-solid fa-stop"></i> Стоп' : '✨ Сочинить'}</button>
+            <span class="jnk-status">${running ? '<i class="fa-solid fa-spinner fa-spin"></i> Модель сочиняет…' : ''}</span>
+        </div>`;
+}
+
+function bindBankCompose() {
+    const s = getSettings();
+    const count = bankEditorEl.querySelector('.jnk-bank-gen-count input');
+    if (!count) return;
+    count.addEventListener('change', () => {
+        let n = Math.round(Number(count.value));
+        if (!Number.isFinite(n)) n = 20;
+        n = Math.min(BANK_GEN_MAX, Math.max(BANK_GEN_MIN, n));
+        count.value = n;
+        s.bankGenCount = n;
+        saveSettings();
+    });
+    bankEditorEl.querySelector('.jnk-bank-gen-sample').addEventListener('change', (e) => {
+        s.bankGenSample = getList(e.target.value)?.id || null;
+        saveSettings();
+    });
+    bankEditorEl.querySelector('.jnk-bank-gen-recent').addEventListener('change', (e) => {
+        s.bankGenRecent = Boolean(e.target.checked);
+        saveSettings();
+    });
+    bankEditorEl.querySelector('.jnk-bank-gen-wishes').addEventListener('input', (e) => {
+        bankGenWishes = e.target.value;
+    });
+    bankEditorEl.querySelector('.jnk-bank-gen-go').addEventListener('click', onBankGenClick);
+}
+
+async function onBankGenClick() {
+    if (bankGen) {
+        bankGen.controller.abort();
+        return;
+    }
+    const chatId = currentChatId();
+    if (!chatId) return;
+    const s = getSettings();
+    const controller = new AbortController();
+    bankGen = { controller, chatId };
+    renderBankEditor();
+
+    try {
+        const sources = await collectBankSources({ recent: s.bankGenRecent });
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (!sources.text.trim()) throw new Error('Нечего читать: у чата нет ни карточки, ни персоны, ни лорбука.');
+
+        const names = getMainRoles().map((r) => r.name);
+        const count = Math.min(BANK_GEN_MAX, Math.max(BANK_GEN_MIN, Number(s.bankGenCount) || 20));
+        const sample = listQuestions(getList(s.bankGenSample));
+        const { instruction, contextText } = buildBankPrompt({ sourcesText: sources.text, names, count, wishes: bankGenWishes, sample });
+        const text = await requestModel({ instruction, contextText }, controller.signal);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        const questions = parseGeneratedQuestions(text);
+        if (questions.length < 3) throw new Error('Не получилось разобрать вопросы — попробуй ещё раз.');
+        const date = new Date().toLocaleDateString('ru-RU', { day: 'numeric', month: 'short' });
+        const list = addList(`✨ ${names.join(' и ') || 'Авторский'} · ${date}`, questions);
+        bankEditorId = list.id;
+        bankCompose = false;
+        if (sources.droppedEntries) {
+            toastr.warning(`Лорбук не влез в лимит, отрезано записей: ${sources.droppedEntries}`, TOAST_TITLE);
+        }
+        toastr.success(`Готово: ${questions.length} ${questionsWord(questions.length)} в новом списке ✨`, TOAST_TITLE);
+    } catch (error) {
+        if (controller.signal.aborted || error?.name === 'AbortError') {
+            if (!controller.junketQuiet) toastr.info('Остановлено', TOAST_TITLE);
+        } else {
+            console.error('[Junket]', error);
+            toastr.error(String(error?.message || error), TOAST_TITLE);
+        }
+    } finally {
+        if (bankGen?.controller === controller) bankGen = null;
+        if (bankEditorEl && !bankEditorEl.hidden) renderBankEditor();
+    }
+}
 
 function openBankEditor(selectedId) {
     if (!overlayEl) return;
@@ -903,6 +1021,8 @@ function closeBankEditor() {
 function renderBankEditor() {
     const bank = getBank();
     const current = bank.find((l) => l.id === bankEditorId) || null;
+    // Выделение в списке слева — только когда открыт сам список, а не «Сочинить»
+    const selectedId = bankCompose ? null : current?.id;
     bankEditorEl.innerHTML = `
         <div class="jnk-modal-card">
             <div class="jnk-modal-head">
@@ -911,11 +1031,12 @@ function renderBankEditor() {
             </div>
             <div class="jnk-bank-editor">
                 <div class="jnk-bank-lists">
-                    ${bank.map((l) => `<button class="jnk-bank-item ${current && l.id === current.id ? 'jnk-chip-on' : ''}" type="button" data-list="${escapeHtml(l.id)}">${escapeHtml(l.name || 'Без названия')}</button>`).join('')}
+                    ${bank.map((l) => `<button class="jnk-bank-item ${l.id === selectedId ? 'jnk-chip-on' : ''}" type="button" data-list="${escapeHtml(l.id)}">${escapeHtml(l.name || 'Без названия')}</button>`).join('')}
                     <button class="jnk-btn jnk-bank-new" type="button">+ Новый список</button>
+                    <button class="jnk-btn jnk-bank-compose ${bankCompose ? 'jnk-chip-on' : ''}" type="button">✨ Сочинить список</button>
                 </div>
                 <div class="jnk-bank-form">
-                    ${current ? `
+                    ${bankCompose ? bankComposeHtml() : current ? `
                         <label class="jnk-cast-field">
                             <span>Название</span>
                             <input class="text_pole jnk-bank-name" type="text" value="${escapeHtml(current.name)}">
@@ -936,14 +1057,24 @@ function renderBankEditor() {
     bankEditorEl.querySelectorAll('[data-list]').forEach((btn) => {
         btn.addEventListener('click', () => {
             bankEditorId = btn.dataset.list;
+            bankCompose = false;
             renderBankEditor();
         });
     });
     bankEditorEl.querySelector('.jnk-bank-new').addEventListener('click', () => {
         bankEditorId = addList().id;
+        bankCompose = false;
         renderBankEditor();
         bankEditorEl.querySelector('.jnk-bank-name')?.select();
     });
+    bankEditorEl.querySelector('.jnk-bank-compose').addEventListener('click', () => {
+        bankCompose = true;
+        renderBankEditor();
+    });
+    if (bankCompose) {
+        bindBankCompose();
+        return;
+    }
     if (!current) return;
 
     const nameInput = bankEditorEl.querySelector('.jnk-bank-name');
@@ -1586,6 +1717,12 @@ function onChatChanged() {
         feedGen.controller.abort();
         feedGen = null;
         toastr.info('Лента комментариев остановлена: сменился чат', TOAST_TITLE);
+    }
+    if (bankGen) {
+        bankGen.controller.junketQuiet = true;
+        bankGen.controller.abort();
+        bankGen = null;
+        toastr.info('Сочинение вопросов остановлено: сменился чат', TOAST_TITLE);
     }
     audienceOpenFor = null;
     feedOpenFor = null;

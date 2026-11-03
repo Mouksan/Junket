@@ -318,3 +318,59 @@ export async function collectSources(saved) {
 
     return { text: blocks.join('\n\n'), loreTokens, loreLimit, droppedEntries };
 }
+
+// ---------------------------------------------------------------------------
+// Источники для «Сочинить список» (банк вопросов)
+// ---------------------------------------------------------------------------
+
+export const BANK_RECENT_MESSAGES = 30;
+
+/** Имя лорбука, привязанного к чату (или '' — не привязан / удалён). */
+export function getChatLorebookName() {
+    const c = ctx();
+    const name = c.chatMetadata?.[METADATA_KEY];
+    return name && (c.getWorldInfoNames?.() || []).includes(name) ? name : '';
+}
+
+/**
+ * Карточка, персона, лорбук, привязанный к чату (в лимите токенов), и по желанию
+ * последние сообщения. Возвращает { text, droppedEntries, hasLore }.
+ */
+export async function collectBankSources({ recent = false } = {}) {
+    const c = ctx();
+    const blocks = [];
+    const card = getCardText();
+    if (card) blocks.push(`# CHARACTER CARD\n${card}`);
+    const persona = getPersonaText();
+    if (persona) blocks.push(`# USER PERSONA (${getUserName()})\n${persona}`);
+
+    let droppedEntries = 0;
+    const chatBook = c.chatMetadata?.[METADATA_KEY];
+    const hasLore = Boolean(chatBook) && (c.getWorldInfoNames?.() || []).includes(chatBook);
+    if (hasLore) {
+        const loreLimit = Number(getSettings().loreTokenLimit) || 30000;
+        let loreTokens = 0;
+        const kept = [];
+        for (const entry of await loadLoreEntries(chatBook)) {
+            const tokens = await countTokens(entry);
+            if (loreTokens + tokens > loreLimit) {
+                droppedEntries++;
+                continue;
+            }
+            loreTokens += tokens;
+            kept.push(entry);
+        }
+        if (kept.length) blocks.push(`# LOREBOOK: ${chatBook} (story summaries)\n${kept.join('\n\n')}`);
+    }
+
+    if (recent) {
+        const last = (c.chat || []).length - 1;
+        if (last >= 0) {
+            const from = Math.max(0, last - BANK_RECENT_MESSAGES + 1);
+            const text = buildSceneText(from, last);
+            if (text) blocks.push(`# RECENT MESSAGES (#${from}–#${last})\n${text}`);
+        }
+    }
+
+    return { text: blocks.join('\n\n'), droppedEntries, hasLore };
+}

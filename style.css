@@ -521,6 +521,35 @@
     margin-top: 6px;
 }
 
+.jnk-bank-compose.jnk-chip-on {
+    border-color: var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
+}
+
+/* «Сочинить список» */
+
+.jnk-bank-form {
+    overflow-y: auto;
+}
+
+.jnk-bank-gen-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 10px;
+}
+
+.jnk-bank-gen-row .jnk-cast-field {
+    flex: 1 1 200px;
+}
+
+.jnk-bank-gen-row .jnk-bank-gen-count {
+    flex: 0 0 150px;
+}
+
+.jnk-bank-gen-wishes {
+    resize: vertical;
+}
+
 .jnk-bank-form {
     display: flex;
     flex-direction: column;

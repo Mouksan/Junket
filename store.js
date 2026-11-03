@@ -42,6 +42,11 @@ export const DEFAULT_SETTINGS = Object.freeze({
     feedStyle: 'bl-feed',        // стиль ленты (feeds/*.md)
     feedCount: 12,               // сколько комментов в пачке
 
+    // «Сочинить список» в банке вопросов
+    bankGenCount: 20,            // сколько вопросов просить (10–30)
+    bankGenRecent: true,         // добавлять последние сообщения чата
+    bankGenSample: null,         // id списка-образца стиля (null — без образца)
+
     // Оформление
     theme: 'magazine',           // тема интервью (themes.js)
     paper: 'day',                // бумага для Газеты, Сценария и Досье: 'day' | 'night'

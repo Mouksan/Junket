@@ -379,3 +379,53 @@ Write exactly ${count} new comments now, as a JSON array only.`;
 
     return { instruction, contextText };
 }
+
+// ---------- «Сочинить список» для банка вопросов ----------
+
+/**
+ * Авторский список вопросов героям истории.
+ * names — главные роли (персы и персона); sample — вопросы списка-образца (может быть пустым).
+ */
+export function buildBankPrompt({ sourcesText, names, count, wishes, sample }) {
+    const language = getLanguage(getSettings().language).prompt;
+    const who = names.length ? names.join(', ') : 'the main characters';
+    const sampleBlock = sample?.length
+        ? `
+
+STYLE SAMPLE
+These questions show the tone, boldness and kind of wording wanted. Do NOT copy them or reuse their topics: write new questions about this story in the same spirit.
+${sample.map((q) => `- ${q}`).join('\n')}`
+        : '';
+    const wishText = String(wishes || '').trim();
+
+    const instruction = `You are writing a list of questions for a fictional interview with the characters of a roleplay story. The story is in the context: the character card, the user persona${sourcesText.includes('# LOREBOOK') ? ', a lorebook with plot summaries' : ''}${sourcesText.includes('# RECENT MESSAGES') ? ' and the most recent messages' : ''}.
+
+WHO IS ASKED
+The main characters: ${who}. A question may be addressed to one of them by name, or to all of them at once ("Who of you…", "Both of you…").
+
+THE QUESTIONS
+- Write exactly ${count} questions.
+- Every question is grounded in concrete details of this story: events, decisions, secrets, promises, relationships, running jokes, side characters, objects. No generic questions that could fit any story.
+- Mix registers across the list, shuffled rather than grouped: serious and deep; "what if" questions and alternate turns of the plot; role swaps and other twists of the premise; funny and absurd; spicy, explicit and indiscreet; tricky, loaded and embarrassing.
+- Some questions may use playful formats: "answer at the same time, on the count of three", "one word each", "each answers for themselves, then compare", "name a red flag".
+- One or two sentences per question. Sharp, specific, a little provocative. No near-duplicates.${sampleBlock}${wishText ? `
+
+USER WISHES (follow them)
+${wishText}` : ''}
+
+NAMES
+Use every name (characters, side characters, places) in the form the story itself uses in its messages, in ${language} and declined according to ${language} grammar. The card, persona and lorebook may spell names in another script; do not copy those spellings.
+
+OUTPUT (strict)
+Exactly ${count} lines, one question per line. No numbering, no bullets, no headings, no blank lines, no quotes around the questions, no preamble, no closing notes.
+
+LANGUAGE
+Write everything in ${language}. No words or phrases in other languages.`;
+
+    const contextText = `${sourcesText}
+
+# TASK
+Write the ${count} questions now, following the instruction exactly.`;
+
+    return { instruction, contextText };
+}

@@ -181,9 +181,9 @@ export function listQuestions(list) {
     return parseQuestions((list?.questions || []).join('\n'));
 }
 
-export function addList() {
+export function addList(name = 'Новый список', questions = []) {
     const bank = getBank();
-    const list = { id: makeId(), name: 'Новый список', questions: [] };
+    const list = { id: makeId(), name, questions: [...questions] };
     bank.push(list);
     saveSettings();
     return list;
@@ -200,6 +200,24 @@ export function deleteList(id) {
     const s = getSettings();
     s.questionBank = getBank().filter((l) => l.id !== id);
     saveSettings();
+}
+
+/** Ответ модели на «Сочинить список» → вопросы: без номеров, маркеров, кавычек, заголовков и повторов. */
+export function parseGeneratedQuestions(text) {
+    const lines = String(text || '')
+        .replace(/\r\n?/g, '\n')
+        .replace(/<(think|thinking|reasoning)>[\s\S]*?<\/\1>/gi, '')
+        .replace(/```[a-z]*\n?/gi, '')
+        .split('\n')
+        .map((line) => line
+            .trim()
+            .replace(/^(?:\d+\s*[.)]|[-*•–—]|\(\d+\))\s+/, '')
+            .replace(/^\*\*(.+)\*\*$/, '$1')
+            .replace(/^[«"](.+)[»"]$/, '$1')
+            .trim())
+        // Шапки вроде «Вот вопросы:» или «## Серьёзные» не нужны
+        .filter((line) => line && !/^#+\s/.test(line) && !/:$/.test(line));
+    return parseQuestions(lines.join('\n'));
 }
 
 /** Случайные n вопросов из списка, в исходном порядке. */
