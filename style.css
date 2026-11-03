@@ -1587,7 +1587,11 @@
 }
 
 .jnk-paper .jnk-cm-text code {
-    background: color-mix(in srgb, var(--jnk-ink) 10%, transparent);
+    /* Теги из ленты: на бумаге свои цвета, тема таверны тут не указ */
+    color: var(--jnk-ink) !important;
+    background: color-mix(in srgb, var(--jnk-ink) 8%, var(--jnk-paper-bg)) !important;
+    border: 1px solid color-mix(in srgb, var(--jnk-rule) 45%, transparent) !important;
+    text-shadow: none !important;
 }
 
 .jnk-paper .jnk-cm-reply-name {
@@ -1752,10 +1756,11 @@
 }
 
 .jnk-th-newspaper.jnk-paper-night {
-    --jnk-paper-bg: #2a261f;
-    --jnk-ink: #e6dcc6;
-    --jnk-muted: #ab9d80;
-    --jnk-rule: #8a7c62;
+    /* Ночная типография: тёмно-синяя бумага, кремовые чернила */
+    --jnk-paper-bg: #1a1f2b;
+    --jnk-ink: #ece6d6;
+    --jnk-muted: #a3a9b6;
+    --jnk-rule: #4d5568;
 }
 
 .jnk-th-newspaper {
@@ -2006,10 +2011,11 @@
 }
 
 .jnk-th-dossier.jnk-paper-night {
-    --jnk-paper-bg: #232321;
-    --jnk-ink: #dcd9d0;
-    --jnk-muted: #9a978e;
-    --jnk-rule: #77756e;
+    /* Графит */
+    --jnk-paper-bg: #1d1f21;
+    --jnk-ink: #dfe2e4;
+    --jnk-muted: #8e959b;
+    --jnk-rule: #50565c;
     --jnk-stamp: #e0726d;
 }
 
