@@ -45,6 +45,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
     // «Сочинить список» в банке вопросов
     bankGenCount: 20,            // сколько вопросов просить (10–30)
     bankGenRecent: true,         // добавлять последние сообщения чата
+    bankGenRecentCount: 30,      // сколько последних сообщений (20–50, шаг 5)
     bankGenSample: null,         // id списка-образца стиля (null — без образца)
 
     // Оформление

@@ -550,6 +550,16 @@
     resize: vertical;
 }
 
+.jnk-bank-gen-recent-box {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.jnk-bank-gen-recent-box[hidden] {
+    display: none;
+}
+
 .jnk-bank-form {
     display: flex;
     flex-direction: column;

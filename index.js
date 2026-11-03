@@ -17,7 +17,7 @@ import {
 import {
     ACTIVE_KIND_LABELS, getLorebookList, resolveLoreSelection, getSourceFlags, storeSources,
     countLorebookTokens, resetLoreTokenCache, collectSources, buildSceneText,
-    collectBankSources, getChatLorebookName, BANK_RECENT_MESSAGES,
+    collectBankSources, getChatLorebookName, normalizeRecentCount, BANK_RECENT_MIN, BANK_RECENT_MAX, BANK_RECENT_STEP,
 } from './sources.js';
 import { buildInterviewPrompt, buildAudiencePrompt, buildFeedPrompt, buildBankPrompt } from './prompt.js';
 import {
@@ -911,8 +911,12 @@ function bankComposeHtml() {
         </div>
         <label class="checkbox_label jnk-check">
             <input type="checkbox" class="jnk-bank-gen-recent" ${s.bankGenRecent ? 'checked' : ''}>
-            <span>Последние ${BANK_RECENT_MESSAGES} сообщений чата</span>
+            <span>Последние сообщения чата</span>
         </label>
+        <div class="jnk-bank-gen-recent-box" ${s.bankGenRecent ? '' : 'hidden'}>
+            <label class="jnk-subtitle" for="jnk_bank_recent">Сообщений: <span class="jnk-bank-recent-count">${normalizeRecentCount(s.bankGenRecentCount)}</span></label>
+            <input id="jnk_bank_recent" class="jnk-range-slider" type="range" min="${BANK_RECENT_MIN}" max="${BANK_RECENT_MAX}" step="${BANK_RECENT_STEP}" value="${normalizeRecentCount(s.bankGenRecentCount)}">
+        </div>
         <div class="jnk-hint">Свежие события, которых ещё нет в саммари. Это заметно больше контекста.</div>
         <label class="jnk-cast-field jnk-bank-gen-wishes-field">
             <span>Пожелания (необязательно)</span>
@@ -944,6 +948,15 @@ function bindBankCompose() {
     bankEditorEl.querySelector('.jnk-bank-gen-recent').addEventListener('change', (e) => {
         s.bankGenRecent = Boolean(e.target.checked);
         saveSettings();
+        bankEditorEl.querySelector('.jnk-bank-gen-recent-box').hidden = !s.bankGenRecent;
+    });
+    const recent = bankEditorEl.querySelector('#jnk_bank_recent');
+    recent.addEventListener('input', () => {
+        bankEditorEl.querySelector('.jnk-bank-recent-count').textContent = recent.value;
+    });
+    recent.addEventListener('change', () => {
+        s.bankGenRecentCount = normalizeRecentCount(recent.value);
+        saveSettings();
     });
     bankEditorEl.querySelector('.jnk-bank-gen-wishes').addEventListener('input', (e) => {
         bankGenWishes = e.target.value;
@@ -964,7 +977,7 @@ async function onBankGenClick() {
     renderBankEditor();
 
     try {
-        const sources = await collectBankSources({ recent: s.bankGenRecent });
+        const sources = await collectBankSources({ recent: s.bankGenRecent, recentCount: s.bankGenRecentCount });
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
         if (!sources.text.trim()) throw new Error('Нечего читать: у чата нет ни карточки, ни персоны, ни лорбука.');
 

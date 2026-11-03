@@ -323,7 +323,17 @@ export async function collectSources(saved) {
 // Источники для «Сочинить список» (банк вопросов)
 // ---------------------------------------------------------------------------
 
-export const BANK_RECENT_MESSAGES = 30;
+export const BANK_RECENT_MIN = 20;
+export const BANK_RECENT_MAX = 50;
+export const BANK_RECENT_STEP = 5;
+export const BANK_RECENT_DEFAULT = 30;
+
+/** Сколько последних сообщений брать: 20–50 с шагом 5. */
+export function normalizeRecentCount(n) {
+    let v = Math.round(Number(n) / BANK_RECENT_STEP) * BANK_RECENT_STEP;
+    if (!Number.isFinite(v)) v = BANK_RECENT_DEFAULT;
+    return Math.min(BANK_RECENT_MAX, Math.max(BANK_RECENT_MIN, v));
+}
 
 /** Имя лорбука, привязанного к чату (или '' — не привязан / удалён). */
 export function getChatLorebookName() {
@@ -336,7 +346,7 @@ export function getChatLorebookName() {
  * Карточка, персона, лорбук, привязанный к чату (в лимите токенов), и по желанию
  * последние сообщения. Возвращает { text, droppedEntries, hasLore }.
  */
-export async function collectBankSources({ recent = false } = {}) {
+export async function collectBankSources({ recent = false, recentCount = BANK_RECENT_DEFAULT } = {}) {
     const c = ctx();
     const blocks = [];
     const card = getCardText();
@@ -366,7 +376,8 @@ export async function collectBankSources({ recent = false } = {}) {
     if (recent) {
         const last = (c.chat || []).length - 1;
         if (last >= 0) {
-            const from = Math.max(0, last - BANK_RECENT_MESSAGES + 1);
+            // Сообщений меньше, чем просили, — берём все, сколько есть
+            const from = Math.max(0, last - normalizeRecentCount(recentCount) + 1);
             const text = buildSceneText(from, last);
             if (text) blocks.push(`# RECENT MESSAGES (#${from}–#${last})\n${text}`);
         }
