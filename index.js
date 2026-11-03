@@ -5,6 +5,7 @@
 // Этап 4: журнальная вёрстка интервью и архив
 // Этап 5а: «Как снимаем» — формат, вопросы, болтовня, вайбы, пожелания
 // Этап 5б: кастинг — актёры и НПС в чате, «Кто в студии», «Закрепить каст»
+// Этап 5в: банк вопросов — списки, «именно эти» / «как примеры», редактор
 
 import {
     ctx, getSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
@@ -19,10 +20,11 @@ import { requestModel } from './connection.js';
 import { addSettingsDrawer } from './settings.js';
 import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle } from './render.js';
 import {
-    FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, QUESTIONS_MIN, QUESTIONS_MAX,
+    FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, BANK_MODES, QUESTIONS_MIN, QUESTIONS_MAX,
     getFormat, normalizeShoot, formatLabel,
 } from './formats.js';
 import { getMainRoles, normalizeCast, newNpc, invitableNpcs, castFromTurns, applyCast } from './cast.js';
+import { getBank, getList, listQuestions, addList, updateList, deleteList, questionsWord } from './bank.js';
 
 // ---------- Окно ----------
 
@@ -71,6 +73,10 @@ function onKeyDown(e) {
     if (e.key === 'Escape' && isOpen()) {
         // Если поверх открыт попап таверны — пусть он сам обработает Esc
         if (document.querySelector('dialog[open]')) return;
+        if (bankEditorEl && !bankEditorEl.hidden) {
+            closeBankEditor();
+            return;
+        }
         closeWindow();
     }
 }
@@ -382,6 +388,8 @@ function shootSectionHtml() {
                 <div class="jnk-hint">Уточнения и болтовня между вопросами не считаются.</div>
             </div>
 
+            ${bankRowHtml(shoot)}
+
             <div class="jnk-subtitle">Болтовня</div>
             <div class="jnk-seg jnk-banter">
                 ${BANTER.map((b) => `<button type="button" class="jnk-seg-btn ${b.id === shoot.banter ? 'active' : ''}" data-banter="${b.id}">${escapeHtml(b.label)}</button>`).join('')}
@@ -393,6 +401,36 @@ function shootSectionHtml() {
 
             <label class="jnk-subtitle" for="jnk_wishes">Пожелания</label>
             <textarea id="jnk_wishes" class="text_pole jnk-wishes" rows="2" placeholder="Например: пусть Маркус постоянно спойлерит, а Киллиан его пинает под столом.">${escapeHtml(shoot.wishes)}</textarea>
+        </div>`;
+}
+
+// ---------- Банк вопросов: строчка в «Как снимаем» ----------
+
+function bankCountText(list) {
+    const n = listQuestions(list).length;
+    return n ? `В списке ${n} ${questionsWord(n)}` : 'В списке пока нет вопросов';
+}
+
+function bankRowHtml(shoot) {
+    const bank = getBank();
+    const list = getList(shoot.bankId);
+    const options = bank.map((l) => `<option value="${escapeHtml(l.id)}" ${list && l.id === list.id ? 'selected' : ''}>${escapeHtml(l.name || 'Без названия')}</option>`).join('');
+    return `
+        <div class="jnk-bank">
+            <label class="jnk-subtitle" for="jnk_bank">Банк вопросов</label>
+            <div class="jnk-bank-row">
+                <select id="jnk_bank" class="text_pole jnk-bank-select">
+                    <option value="">— не использовать —</option>
+                    ${options}
+                </select>
+                <button class="jnk-btn jnk-bank-edit" type="button">✎ Списки</button>
+            </div>
+            <div class="jnk-bank-opts" ${list ? '' : 'hidden'}>
+                <div class="jnk-seg jnk-bank-mode">
+                    ${BANK_MODES.map((m) => `<button type="button" class="jnk-seg-btn ${m.id === shoot.bankMode ? 'active' : ''}" data-bankmode="${m.id}">${escapeHtml(m.label)}</button>`).join('')}
+                </div>
+                <div class="jnk-hint jnk-bank-count">${list ? escapeHtml(bankCountText(list)) : ''}</div>
+            </div>
         </div>`;
 }
 
@@ -425,7 +463,13 @@ function bindShootSection(pane) {
         if (!btn) return;
         const shoot = getShoot();
 
-        if (btn.dataset.studio) {
+        if (btn.classList.contains('jnk-bank-edit')) {
+            openBankEditor(shoot.bankId);
+            return;
+        } else if (btn.dataset.bankmode) {
+            shoot.bankMode = btn.dataset.bankmode;
+            section.querySelectorAll('[data-bankmode]').forEach((b) => b.classList.toggle('active', b === btn));
+        } else if (btn.dataset.studio) {
             shoot.studio = btn.dataset.studio;
             section.querySelectorAll('[data-studio]').forEach((b) => b.classList.toggle('active', b === btn));
             section.querySelectorAll('[data-actors-only]').forEach((row) => { row.hidden = shoot.studio === 'characters'; });
@@ -459,6 +503,15 @@ function bindShootSection(pane) {
         } else {
             return;
         }
+        saveShoot(shoot);
+    });
+
+    section.querySelector('#jnk_bank').addEventListener('change', (e) => {
+        const shoot = getShoot();
+        const list = getList(e.target.value);
+        shoot.bankId = list ? list.id : null;
+        section.querySelector('.jnk-bank-opts').hidden = !list;
+        section.querySelector('.jnk-bank-count').textContent = list ? bankCountText(list) : '';
         saveShoot(shoot);
     });
 
@@ -723,6 +776,98 @@ function renderNewPane() {
 function onChatMessagesChanged() {
     // Новое/удалённое/изменённое сообщение — освежаем превью, если окно открыто
     if (isOpen()) renderPreview();
+}
+
+// ---------- Банк вопросов: редактор списков ----------
+
+let bankEditorEl = null;
+let bankEditorId = null;
+
+function openBankEditor(selectedId) {
+    if (!overlayEl) return;
+    const bank = getBank();
+    bankEditorId = (selectedId && bank.some((l) => l.id === selectedId)) ? selectedId : (bank[0]?.id || null);
+    if (!bankEditorEl) {
+        bankEditorEl = document.createElement('div');
+        bankEditorEl.className = 'jnk-modal';
+        overlayEl.querySelector('.jnk-window').appendChild(bankEditorEl);
+    }
+    bankEditorEl.hidden = false;
+    renderBankEditor();
+}
+
+function closeBankEditor() {
+    if (!bankEditorEl) return;
+    bankEditorEl.hidden = true;
+    // Списки могли поменяться — освежаем выпадашку в «Как снимаем»
+    renderNewPane();
+}
+
+function renderBankEditor() {
+    const bank = getBank();
+    const current = bank.find((l) => l.id === bankEditorId) || null;
+    bankEditorEl.innerHTML = `
+        <div class="jnk-modal-card">
+            <div class="jnk-modal-head">
+                <div class="jnk-section-title">Банк вопросов</div>
+                <button class="jnk-btn jnk-bank-done" type="button">Готово</button>
+            </div>
+            <div class="jnk-bank-editor">
+                <div class="jnk-bank-lists">
+                    ${bank.map((l) => `<button class="jnk-bank-item ${current && l.id === current.id ? 'jnk-chip-on' : ''}" type="button" data-list="${escapeHtml(l.id)}">${escapeHtml(l.name || 'Без названия')}</button>`).join('')}
+                    <button class="jnk-btn jnk-bank-new" type="button">+ Новый список</button>
+                </div>
+                <div class="jnk-bank-form">
+                    ${current ? `
+                        <label class="jnk-cast-field">
+                            <span>Название</span>
+                            <input class="text_pole jnk-bank-name" type="text" value="${escapeHtml(current.name)}">
+                        </label>
+                        <label class="jnk-cast-field jnk-bank-text-field">
+                            <span>Вопросы — по одному на строку</span>
+                            <textarea class="text_pole jnk-bank-text" spellcheck="true">${escapeHtml(current.questions.join('\n'))}</textarea>
+                        </label>
+                        <div class="jnk-bank-form-foot">
+                            <span class="jnk-hint jnk-bank-editor-count">${escapeHtml(bankCountText(current))}</span>
+                            <button class="jnk-btn jnk-btn-danger jnk-bank-delete" type="button"><i class="fa-solid fa-trash-can"></i> Удалить список</button>
+                        </div>` : '<div class="jnk-empty">Списков нет. Создай первый.</div>'}
+                </div>
+            </div>
+        </div>`;
+
+    bankEditorEl.querySelector('.jnk-bank-done').addEventListener('click', closeBankEditor);
+    bankEditorEl.querySelectorAll('[data-list]').forEach((btn) => {
+        btn.addEventListener('click', () => {
+            bankEditorId = btn.dataset.list;
+            renderBankEditor();
+        });
+    });
+    bankEditorEl.querySelector('.jnk-bank-new').addEventListener('click', () => {
+        bankEditorId = addList().id;
+        renderBankEditor();
+        bankEditorEl.querySelector('.jnk-bank-name')?.select();
+    });
+    if (!current) return;
+
+    const nameInput = bankEditorEl.querySelector('.jnk-bank-name');
+    nameInput.addEventListener('input', () => {
+        updateList(current.id, { name: nameInput.value });
+        const item = bankEditorEl.querySelector(`[data-list="${CSS.escape(current.id)}"]`);
+        if (item) item.textContent = nameInput.value || 'Без названия';
+    });
+    const textArea = bankEditorEl.querySelector('.jnk-bank-text');
+    textArea.addEventListener('input', () => {
+        // Храним строки как есть, чтобы не мешать печатать; чистка — при использовании
+        updateList(current.id, { questions: textArea.value.split('\n') });
+        bankEditorEl.querySelector('.jnk-bank-editor-count').textContent = bankCountText(getList(current.id));
+    });
+    bankEditorEl.querySelector('.jnk-bank-delete').addEventListener('click', async () => {
+        const ok = await confirmPopup(`Удалить список «${escapeHtml(current.name || 'Без названия')}»? Отменить не получится.`);
+        if (!ok) return;
+        deleteList(current.id);
+        bankEditorId = getBank()[0]?.id || null;
+        renderBankEditor();
+    });
 }
 
 // ---------- Кастинг ----------
@@ -994,6 +1139,7 @@ function onChatChanged() {
     }
     resetLoreTokenCache();
     archiveOpenId = null;
+    if (bankEditorEl) bankEditorEl.hidden = true;
     // Окно открыто — перерисовываем под новый чат, иначе ничего не делаем
     if (isOpen()) renderAll();
 }

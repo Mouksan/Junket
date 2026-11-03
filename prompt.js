@@ -3,6 +3,7 @@
 // Кастинг (5б), банк вопросов (5в) и вопросы из зала (5г) подключатся позже.
 
 import { getMainRoles, normalizeCast } from './cast.js';
+import { getList, listQuestions, pickQuestions } from './bank.js';
 import { getFormat, getVenue, getBanter, getFormality, VIBES, normalizeShoot, getLanguage } from './formats.js';
 import { getSettings } from './store.js';
 
@@ -53,6 +54,30 @@ function swearingBlock(shoot, language) {
     }
     const profanity = language === 'Russian' ? 'strong Russian profanity (мат)' : `strong ${language} profanity`;
     return `\n\nSWEARING\nThis is an informal setting. Use real ${profanity} naturally and more than once, the way people actually talk off camera. Not euphemisms. Never censor, bleep or mask words: no [BLEEP], no letters replaced with symbols or dashes (write the word in full, not like х*й).`;
+}
+
+// Банк вопросов: «именно эти» — случайные N из списка (не хватает — досочинить), «как примеры» — образец тона
+function bankBlock(shoot) {
+    const list = getList(shoot.bankId);
+    const questions = listQuestions(list);
+    if (!questions.length) return '';
+    const who = shoot.format === 'fans' ? 'They are read out as fan questions.' : 'They are asked by the interviewer.';
+    const adapt = shoot.studio === 'characters'
+        ? ' Questions about actors or filming are turned into questions the characters themselves can answer.'
+        : '';
+
+    if (shoot.bankMode === 'exact') {
+        const picked = pickQuestions(questions, shoot.questions);
+        const rest = shoot.questions - picked.length;
+        const more = rest > 0 ? `\nThen add ${rest} more main question${rest === 1 ? '' : 's'} of your own about concrete moments of SCENES, in the same spirit.` : '';
+        return `\n\nQUESTIONS TO ASK
+These are the main questions, in this order. ${who} You may adjust the wording slightly to fit the format and the scene, but keep the meaning.${adapt}
+${picked.map((q, i) => `${i + 1}. ${q}`).join('\n')}${more}`;
+    }
+
+    return `\n\nQUESTION EXAMPLES
+These show the tone, boldness and kind of questions wanted. They are NOT the questions to ask: write your own questions about the concrete moments of SCENES in the same spirit.${adapt}
+${questions.map((q) => `- ${q}`).join('\n')}`;
 }
 
 function wishesBlock(shoot) {
@@ -136,7 +161,7 @@ export function buildInterviewPrompt({ sourcesText, sceneText, from, to, shoot: 
 ${actors ? actorsPart(people, language) : charactersPart(people)}
 
 FORMAT
-${formatBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${wishesBlock(shoot)}
+${formatBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${bankBlock(shoot)}${wishesBlock(shoot)}
 
 ${rhythmBlock(shoot)}
 

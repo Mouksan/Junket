@@ -135,6 +135,11 @@ export const STUDIO = [
     { id: 'characters', label: 'Персонажи' },
 ];
 
+export const BANK_MODES = [
+    { id: 'exact', label: 'Задать именно эти' },
+    { id: 'examples', label: 'Как примеры' },
+];
+
 export const QUESTIONS_MIN = 3;
 export const QUESTIONS_MAX = 15;
 
@@ -166,6 +171,8 @@ export function defaultShoot() {
         wishes: '',
         studio: 'actors',
         guests: [],     // id НПС из каста, позванных в это интервью
+        bankId: null,   // выбранный список из банка вопросов (null — не использовать)
+        bankMode: 'examples',   // 'exact' — задать именно эти, 'examples' — как примеры
     };
 }
 
@@ -191,6 +198,8 @@ export function normalizeShoot(saved) {
         wishes: typeof s.wishes === 'string' ? s.wishes : '',
         studio: STUDIO.some((x) => x.id === s.studio) ? s.studio : base.studio,
         guests: Array.isArray(s.guests) ? s.guests.filter((g) => typeof g === 'string') : [],
+        bankId: typeof s.bankId === 'string' && s.bankId ? s.bankId : null,
+        bankMode: s.bankMode === 'exact' ? 'exact' : 'examples',
     };
 }
 
