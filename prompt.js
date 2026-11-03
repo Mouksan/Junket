@@ -131,11 +131,43 @@ function whoActors(people) {
     }).join('\n');
 }
 
+/**
+ * Справка по касту: НПС с записанным актёром, которых не позвали в студию.
+ * Если о них заговорят, имя и характер актёра должны совпадать с «Кастингом».
+ */
+function otherCastBlock(shoot, cast) {
+    const others = cast.npcs.filter((n) => n.name.trim() && n.actor.trim() && !shoot.guests.includes(n.id));
+    if (!others.length) return '';
+    return `
+
+OTHER CAST (not in the studio, reference only)
+If anyone mentions one of these characters or the actor who plays them, use exactly this actor name and off-camera personality. Do not bring them up just because they are listed.
+${others.map((n) => `- ${n.name.trim()} (supporting character) — played by ${n.actor.trim()}${n.notes.trim() ? `. Off camera: ${n.notes.trim()}` : ''}`).join('\n')}`;
+}
+
+/** Весь каст с актёрами — для ленты фандома (фанаты знают актёров по именам). */
+function feedCastBlock(cast) {
+    const lines = [];
+    for (const role of getMainRoles()) {
+        const entry = cast.mains[role.name];
+        if (entry?.actor?.trim()) lines.push(`- ${role.name} — played by ${entry.actor.trim()}${entry.notes?.trim() ? `. Off camera: ${entry.notes.trim()}` : ''}`);
+    }
+    for (const n of cast.npcs) {
+        if (n.name.trim() && n.actor.trim()) lines.push(`- ${n.name.trim()} (supporting character) — played by ${n.actor.trim()}${n.notes.trim() ? `. Off camera: ${n.notes.trim()}` : ''}`);
+    }
+    if (!lines.length) return '';
+    return `
+
+CAST (reference only)
+If a comment mentions one of these characters' actors, use exactly this name. Actors not listed here are named as in the interview.
+${lines.join('\n')}`;
+}
+
 function whoCharacters(people) {
     return people.map((p) => `- ${p.npc ? `${p.name} (supporting character)` : p.name}`).join('\n');
 }
 
-function actorsPart(people, language, reaction = false) {
+function actorsPart(people, language, reaction = false, otherCast = '') {
     const now = reaction
         ? 'Now the actors watch the edited footage of these scenes together, as described in FORMAT.'
         : 'Now the actors sit down together for the interview described in FORMAT, about filming these scenes.';
@@ -143,7 +175,7 @@ function actorsPart(people, language, reaction = false) {
 The roleplay story in the context is treated as a TV series being filmed. Its characters are played by actors. The scenes in SCENES were just filmed. ${now}
 
 WHO IS INTERVIEWED
-${whoActors(people)}
+${whoActors(people)}${otherCast}
 
 THE ACTORS
 - Each actor is a distinct person with their own name, personality and manner, clearly different from the character they play (the actor behind a menacing character may be sweet and shy off camera, and so on).
@@ -204,7 +236,7 @@ ${speakerTag}`;
 
     let instruction = `You are writing a fictional ${actors && !reaction ? 'behind-the-scenes ' : ''}${piece}.
 
-${actors ? actorsPart(people, language, reaction) : charactersPart(people, reaction)}
+${actors ? actorsPart(people, language, reaction, otherCastBlock(shoot, cast)) : charactersPart(people, reaction)}
 
 FORMAT
 ${reaction ? reactionFormatBlock(shoot) : formatBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${bankBlock(shoot)}${reaction ? topicsBlock(shoot) : ''}${wishesBlock(shoot)}
@@ -273,7 +305,7 @@ ${own.map((q, i) => `  ${i + 1}. ${q}`).join('\n')}`
 
     const instruction = `You are continuing a fictional ${actors ? 'behind-the-scenes ' : ''}interview with a segment of questions from the audience.
 
-${actors ? actorsPart(people, language) : charactersPart(people)}
+${actors ? actorsPart(people, language, false, otherCastBlock(shoot, cast)) : charactersPart(people)}
 
 FORMAT OF THE INTERVIEW
 ${formatLines.join('\n')}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${wishesBlock(shoot)}
@@ -323,11 +355,13 @@ Write the audience segment now, following the instruction exactly.`;
  * (контракт ответа и стиль ленты из ST-Comments); interviewText — интервью с раундами;
  * earlierText — прошлые комменты этой ленты (пусто, если лента новая).
  */
-export function buildFeedPrompt({ contract, styleText, count, sceneText, from, to, interviewText, earlierText }) {
+export function buildFeedPrompt({ contract, styleText, count, sceneText, from, to, interviewText, earlierText, cast: rawCast, studio }) {
     const language = getLanguage(getSettings().language).prompt;
+    // В режиме «Персонажи» актёров нет — справку не шлём
+    const castText = studio === 'characters' ? '' : feedCastBlock(normalizeCast(rawCast));
     const instruction = `${contract}
 
-Language of the comments: ${language}, unless the style below says otherwise. Keep the characters' and actors' names exactly as the interview writes them.
+Language of the comments: ${language}, unless the style below says otherwise. Keep the characters' and actors' names exactly as the interview writes them.${castText}
 
 ${styleText}`;
 

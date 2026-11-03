@@ -1189,7 +1189,7 @@ function renderArchiveViewer(pane, item) {
     pane.querySelector('.jnk-copy').addEventListener('click', async () => {
         const feedText = feedPlainText(item.feed);
         const ok = await copyToClipboard(`${interviewPlainText(item)}${feedText ? `\n\n— Комментарии —\n\n${feedText}` : ''}`);
-        if (ok) toastr.success('Интервью скопировано', TOAST_TITLE);
+        if (ok) toastr.success(isReaction(item.format) ? 'Реакция скопирована' : 'Интервью скопировано', TOAST_TITLE);
         else toastr.error('Не получилось скопировать', TOAST_TITLE);
     });
     pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
@@ -1444,6 +1444,8 @@ async function onFeedClick(itemId) {
             to,
             interviewText: interviewPlainText(item),
             earlierText: feedPlainText(item.feed),
+            cast: getCast(),
+            studio: item.studio,
         });
         const text = await requestModel({ instruction, contextText }, controller.signal);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
