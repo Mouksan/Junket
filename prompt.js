@@ -267,3 +267,33 @@ Write the audience segment now, following the instruction exactly.`;
 
     return { instruction, contextText };
 }
+
+// ---------- Реакции фандома ----------
+
+/**
+ * Лента комментов под интервью. contract и styleText — из comments.js
+ * (контракт ответа и стиль ленты из ST-Comments); interviewText — интервью с раундами;
+ * earlierText — прошлые комменты этой ленты (пусто, если лента новая).
+ */
+export function buildFeedPrompt({ contract, styleText, count, sceneText, from, to, interviewText, earlierText }) {
+    const language = getLanguage(getSettings().language).prompt;
+    const instruction = `${contract}
+
+Language of the comments: ${language}, unless the style below says otherwise. Keep the characters' and actors' names exactly as the interview writes them.
+
+${styleText}`;
+
+    const contextText = `[Episode] (messages #${from}–#${to})
+${sceneText}
+
+[Interview]
+${interviewText}${earlierText ? `
+
+[Earlier comments]
+${earlierText}` : ''}
+
+# TASK
+Write exactly ${count} new comments now, as a JSON array only.`;
+
+    return { instruction, contextText };
+}

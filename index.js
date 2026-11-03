@@ -7,6 +7,7 @@
 // Этап 5б: кастинг — актёры и НПС в чате, «Кто в студии», «Закрепить каст»
 // Этап 5в: банк вопросов — списки, «именно эти» / «как примеры», редактор
 // Этап 5г: вопросы из зала — раунды под интервью
+// Реакции фандома: лента комментов под интервью (порт из ST-Comments)
 
 import {
     ctx, getSettings, saveSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
@@ -16,7 +17,11 @@ import {
     ACTIVE_KIND_LABELS, getLorebookList, resolveLoreSelection, getSourceFlags, storeSources,
     countLorebookTokens, resetLoreTokenCache, collectSources, buildSceneText,
 } from './sources.js';
-import { buildInterviewPrompt, buildAudiencePrompt } from './prompt.js';
+import { buildInterviewPrompt, buildAudiencePrompt, buildFeedPrompt } from './prompt.js';
+import {
+    FEED_STYLES, FEED_COUNT_MIN, FEED_COUNT_MAX, getFeedStyle, loadFeedStyle, feedContract,
+    parseComments, renderFeedHtml, feedPlainText,
+} from './comments.js';
 import { requestModel } from './connection.js';
 import { addSettingsDrawer } from './settings.js';
 import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle, fullInterviewText } from './render.js';
@@ -1058,6 +1063,7 @@ function renderArchiveViewer(pane, item) {
             </div>
         </div>
         ${renderInterviewHtml(item)}
+        ${renderFeedHtml(item.feed)}
         ${String(item.text || '').trim() ? audiencePanelHtml(item) : ''}`;
 
     pane.querySelector('.jnk-back').addEventListener('click', () => {
@@ -1065,17 +1071,20 @@ function renderArchiveViewer(pane, item) {
         renderArchive();
     });
     pane.querySelector('.jnk-copy').addEventListener('click', async () => {
-        const ok = await copyToClipboard(interviewPlainText(item));
+        const feedText = feedPlainText(item.feed);
+        const ok = await copyToClipboard(`${interviewPlainText(item)}${feedText ? `\n\n— Комментарии —\n\n${feedText}` : ''}`);
         if (ok) toastr.success('Интервью скопировано', TOAST_TITLE);
         else toastr.error('Не получилось скопировать', TOAST_TITLE);
     });
     pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
     pane.querySelector('.jnk-pin')?.addEventListener('click', () => pinCast(item));
     pane.querySelector('.jnk-fav').addEventListener('click', (e) => toggleFavorite(item.id, e.currentTarget));
+    pane.querySelector('.jnk-feed-delete')?.addEventListener('click', () => deleteFeed(item.id));
     pane.querySelectorAll('.jnk-round-delete').forEach((btn) => {
         btn.addEventListener('click', () => deleteRound(item.id, btn.closest('[data-round]').dataset.round));
     });
     bindAudiencePanel(pane, item);
+    bindFeedPanel(pane, item);
 }
 
 // ---------- Вопросы из зала ----------
@@ -1090,7 +1099,10 @@ function audiencePanelHtml(item) {
     const running = audienceGen && audienceGen.itemId === item.id;
     return `
         <div class="jnk-audience">
-            <button class="jnk-btn jnk-audience-toggle" type="button">🎤 Вопросы из зала</button>
+            <div class="jnk-extras-buttons">
+                <button class="jnk-btn jnk-audience-toggle" type="button">🎤 Вопросы из зала</button>
+                <button class="jnk-btn jnk-feed-toggle" type="button">💬 Реакция фандома</button>
+            </div>
             <div class="jnk-audience-panel" ${open || running ? '' : 'hidden'}>
                 <label class="jnk-cast-field">
                     <span>Свои вопросы (необязательно)</span>
@@ -1112,6 +1124,7 @@ function audiencePanelHtml(item) {
                     <span class="jnk-status">${running ? '<i class="fa-solid fa-spinner fa-spin"></i> Зал спрашивает…' : ''}</span>
                 </div>
             </div>
+            ${feedPanelHtml(item)}
         </div>`;
 }
 
@@ -1218,6 +1231,137 @@ async function onAudienceClick(itemId) {
     }
 }
 
+// ---------- Реакции фандома ----------
+
+let feedGen = null;          // { controller, chatId, itemId } пока идёт запрос
+let feedOpenFor = null;      // у какого интервью раскрыта панель
+
+function feedPanelHtml(item) {
+    const s = getSettings();
+    const running = feedGen && feedGen.itemId === item.id;
+    const styleId = getFeedStyle(s.feedStyle).id;
+    return `
+        <div class="jnk-feed-panel" ${feedOpenFor === item.id || running ? '' : 'hidden'}>
+            <div class="jnk-audience-row">
+                <label class="jnk-cast-field">
+                    <span>Стиль ленты</span>
+                    <select class="text_pole jnk-feed-style">
+                        ${FEED_STYLES.map((f) => `<option value="${f.id}" ${f.id === styleId ? 'selected' : ''}>${escapeHtml(f.label)}</option>`).join('')}
+                    </select>
+                </label>
+                <label class="jnk-cast-field jnk-audience-count-field">
+                    <span>Комментариев</span>
+                    <input class="text_pole jnk-feed-count" type="number" min="${FEED_COUNT_MIN}" max="${FEED_COUNT_MAX}" step="1" value="${escapeHtml(s.feedCount)}">
+                </label>
+            </div>
+            <div class="jnk-actions jnk-audience-actions">
+                <button class="jnk-go jnk-feed-go ${running ? 'jnk-stop' : ''}" type="button">${running ? '<i class="fa-solid fa-stop"></i> Стоп' : 'Собрать'}</button>
+                <span class="jnk-status">${running ? '<i class="fa-solid fa-spinner fa-spin"></i> Фандом печатает…' : ''}</span>
+            </div>
+        </div>`;
+}
+
+function bindFeedPanel(pane, item) {
+    const box = pane.querySelector('.jnk-audience');
+    if (!box) return;
+    box.querySelector('.jnk-feed-toggle').addEventListener('click', () => {
+        const panel = box.querySelector('.jnk-feed-panel');
+        panel.hidden = !panel.hidden;
+        feedOpenFor = panel.hidden ? null : item.id;
+    });
+    box.querySelector('.jnk-feed-style').addEventListener('change', (e) => {
+        getSettings().feedStyle = getFeedStyle(e.target.value).id;
+        saveSettings();
+    });
+    const count = box.querySelector('.jnk-feed-count');
+    count.addEventListener('change', () => {
+        let n = Math.round(Number(count.value));
+        if (!Number.isFinite(n)) n = 12;
+        n = Math.min(FEED_COUNT_MAX, Math.max(FEED_COUNT_MIN, n));
+        count.value = n;
+        getSettings().feedCount = n;
+        saveSettings();
+    });
+    box.querySelector('.jnk-feed-go').addEventListener('click', () => onFeedClick(item.id));
+}
+
+async function onFeedClick(itemId) {
+    if (feedGen) {
+        feedGen.controller.junketQuiet = true;
+        feedGen.controller.abort();
+        const stopped = feedGen.itemId;
+        feedGen = null;
+        toastr.info('Генерация остановлена', TOAST_TITLE);
+        refreshViewer(stopped);
+        return;
+    }
+    const store = getChatStore();
+    const item = store?.interviews.find((i) => i.id === itemId);
+    if (!item?.range) {
+        toastr.warning('У этого интервью нет диапазона сообщений — собрать ленту не получится', TOAST_TITLE);
+        return;
+    }
+
+    const s = getSettings();
+    const count = Math.min(FEED_COUNT_MAX, Math.max(FEED_COUNT_MIN, Math.round(Number(s.feedCount)) || 12));
+    const styleId = getFeedStyle(s.feedStyle).id;
+    const chatId = currentChatId();
+    const controller = new AbortController();
+    feedGen = { controller, chatId, itemId };
+    feedOpenFor = itemId;
+    refreshViewer(itemId);
+
+    try {
+        const last = lastIndex();
+        if (item.range.from > last) throw new Error('Сообщений из этого интервью в чате больше нет.');
+        const to = Math.min(item.range.to, last);
+        const styleText = await loadFeedStyle(styleId);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        const { instruction, contextText } = buildFeedPrompt({
+            contract: feedContract(count),
+            styleText,
+            count,
+            sceneText: buildSceneText(item.range.from, to),
+            from: item.range.from,
+            to,
+            interviewText: interviewPlainText(item),
+            earlierText: feedPlainText(item.feed),
+        });
+        const text = await requestModel({ instruction, contextText }, controller.signal);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        const messages = parseComments(text);
+        if (!messages) throw new Error('Не получилось разобрать ответ модели — попробуй ещё раз.');
+
+        const fresh = getChatStore()?.interviews.find((i) => i.id === itemId);
+        if (!fresh || currentChatId() !== chatId) return;
+        if (!Array.isArray(fresh.feed)) fresh.feed = [];
+        fresh.feed.push({ id: makeId(), createdAt: Date.now(), styleId, messages });
+        await saveChatStore();
+        toastr.success(`Фандом высказался: ${messages.length} 💬`, TOAST_TITLE);
+    } catch (error) {
+        if (controller.signal.aborted || error?.name === 'AbortError') {
+            if (!controller.junketQuiet) toastr.info('Генерация остановлена', TOAST_TITLE);
+        } else {
+            console.error('[Junket]', error);
+            toastr.error(String(error?.message || error), TOAST_TITLE);
+        }
+    } finally {
+        if (feedGen?.controller === controller) feedGen = null;
+        refreshViewer(itemId);
+    }
+}
+
+async function deleteFeed(itemId) {
+    const ok = await confirmPopup('Удалить всю ленту комментариев под этим интервью? Отменить не получится.');
+    if (!ok) return;
+    const item = getChatStore()?.interviews.find((i) => i.id === itemId);
+    if (!item) return;
+    item.feed = [];
+    await saveChatStore();
+    refreshViewer(itemId);
+}
+
 async function deleteRound(itemId, roundId) {
     const ok = await confirmPopup('Удалить этот раунд вопросов из зала? Отменить не получится.');
     if (!ok) return;
@@ -1318,7 +1462,14 @@ function onChatChanged() {
         audienceGen = null;
         toastr.info('Вопросы из зала остановлены: сменился чат', TOAST_TITLE);
     }
+    if (feedGen) {
+        feedGen.controller.junketQuiet = true;
+        feedGen.controller.abort();
+        feedGen = null;
+        toastr.info('Лента комментариев остановлена: сменился чат', TOAST_TITLE);
+    }
     audienceOpenFor = null;
+    feedOpenFor = null;
     resetLoreTokenCache();
     archiveOpenId = null;
     if (bankEditorEl) bankEditorEl.hidden = true;

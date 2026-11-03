@@ -37,6 +37,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
     // Вопросы из зала
     audienceCount: 2,            // сколько зрительских вопросов в раунде
     audienceNick: 'Из зала',     // ник автора в зале
+
+    // Реакции фандома
+    feedStyle: 'bl-feed',        // стиль ленты (feeds/*.md)
+    feedCount: 12,               // сколько комментов в пачке
 });
 
 export function ctx() {
