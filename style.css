@@ -353,15 +353,11 @@
     display: none !important;
 }
 
-.jnk-chip.jnk-chip-on {
-    color: #fff;
-    border-color: var(--SmartThemeQuoteColor);
-    background: var(--SmartThemeQuoteColor);
-}
-
+.jnk-chip.jnk-chip-on,
 .jnk-chip.jnk-chip-on:hover {
-    background: var(--SmartThemeQuoteColor);
-    filter: brightness(1.08);
+    color: inherit;
+    border-color: var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 22%, transparent);
 }
 
 .jnk-questions {
@@ -507,18 +503,18 @@
 
 .jnk-go {
     padding: 9px 22px;
-    color: #fff;
+    color: var(--SmartThemeBodyColor);
     font: inherit;
     font-weight: 700;
-    background: var(--SmartThemeQuoteColor);
-    border: none;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 22%, transparent);
+    border: 1px solid var(--SmartThemeQuoteColor);
     border-radius: 999px;
     cursor: pointer;
     transition: filter 0.15s, opacity 0.15s;
 }
 
 .jnk-go:hover:not(:disabled) {
-    filter: brightness(1.1);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 34%, transparent);
 }
 
 .jnk-go:disabled {
@@ -527,7 +523,8 @@
 }
 
 .jnk-go.jnk-stop {
-    background: #b85450;
+    background: color-mix(in srgb, #d0605a 25%, transparent);
+    border-color: #d0605a;
 }
 
 .jnk-status {
@@ -830,8 +827,9 @@
 }
 
 .jnk-seg-btn.active {
-    color: #fff;
-    background: var(--SmartThemeQuoteColor);
+    color: var(--SmartThemeBodyColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 22%, transparent);
+    box-shadow: inset 0 0 0 1px var(--SmartThemeQuoteColor);
     opacity: 1;
 }
 

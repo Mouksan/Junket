@@ -4,6 +4,7 @@
 export const FORMATS = [
     {
         id: 'junket',
+        formality: 'formal',
         icon: '🎬',
         label: 'Джанкет',
         questions: 6,
@@ -12,6 +13,7 @@ Formality: professional and on message. It is promo, so the actors are careful, 
     },
     {
         id: 'talkshow',
+        formality: 'formal',
         icon: '📺',
         label: 'Ток-шоу',
         questions: 5,
@@ -20,6 +22,7 @@ Formality: neutral. Relaxed, the host jokes, the actors tell anecdotes, the audi
     },
     {
         id: 'podcast',
+        formality: 'informal',
         icon: '🎙️',
         label: 'Подкаст',
         questions: 12,
@@ -28,6 +31,7 @@ Formality: completely informal. Jokes, fandom memes and bait, fanservice, teasin
     },
     {
         id: 'fans',
+        formality: null,   // у фанатов градус задаёт площадка
         icon: '💌',
         label: 'Вопросы фанатов',
         questions: 8,
@@ -35,6 +39,7 @@ Formality: completely informal. Jokes, fandom memes and bait, fanservice, teasin
     },
     {
         id: 'bts',
+        formality: 'informal',
         icon: '🎞️',
         label: 'Закулисье',
         questions: 6,
@@ -43,6 +48,7 @@ Formality: informal and playful.`,
     },
     {
         id: 'tabloid',
+        formality: 'informal',
         icon: '📰',
         label: 'Жёлтая пресса',
         questions: 6,
@@ -54,16 +60,19 @@ Formality: informal and playful.`,
 export const FAN_VENUES = [
     {
         id: 'qa',
+        formality: 'formal',
         label: 'Официальный Q&A',
         prompt: `Venue: an official fan Q&A at a promo event. Formality of a press junket: the host rephrases even the wildest fan question into polite, professional wording before asking it, and the actors answer carefully. No vulgar jokes, no slang, no swearing.`,
     },
     {
         id: 'show',
+        formality: 'formal',
         label: 'На шоу',
         prompt: `Venue: a talk show segment. Neutral formality: wild fan questions are softened into broadcast-safe wording, and the answers stay within the bounds of TV. No vulgar jokes, no slang, no swearing.`,
     },
     {
         id: 'stream',
+        formality: 'informal',
         label: 'Стрим',
         prompt: `Venue: a live stream. Completely informal, like a podcast: questions are read out as they are, the actors laugh and actually answer them. Slang and swearing are fine.`,
     },
@@ -94,8 +103,9 @@ export const VIBES = [
         label: 'Актёры между собой',
         options: [
             { id: 'friends', label: 'Лучшие друзья', prompt: 'The actors are best friends off camera: comfortable together, inside jokes, finishing each other\'s sentences.' },
-            { id: 'rivals', label: 'Бесят друг друга', prompt: 'The actors get on each other\'s nerves: needling, eye-rolling, competitive, yet professional enough to finish the interview.' },
+            { id: 'rivals', label: 'Бесят друг друга', prompt: 'The actors genuinely get on each other\'s nerves. Real friction, not playful flirting: they contradict each other, interrupt, roll their eyes, mock each other\'s acting choices and on-set habits, compete for the last word, and the interviewer can feel the tension. They stay just professional enough to finish the interview.' },
             { id: 'flirt', label: 'Подозрительно много флиртуют', prompt: 'The actors flirt with each other suspiciously much, and everyone notices.' },
+            { id: 'dating', label: 'Встречаются', prompt: 'The actors are dating in real life, and it is public: open flirting on air, private jokes, touches. Being a couple makes some scenes easier to play and others harder (it is awkward to do a fake fight with someone you love, or a kiss with half the crew watching), and they talk about it.' },
             { id: 'strangers', label: 'Только познакомились', prompt: 'The actors barely know each other yet: polite, a little awkward, getting to know each other during the interview.' },
         ],
     },
@@ -124,6 +134,12 @@ export const QUESTIONS_MAX = 15;
 
 export function getFormat(id) {
     return FORMATS.find((f) => f.id === id) || FORMATS[0];
+}
+
+/** 'formal' | 'informal' — градус выбранного формата (у фанатов — по площадке). */
+export function getFormality(shoot) {
+    const format = getFormat(shoot.format);
+    return format.formality || getVenue(shoot.venue).formality;
 }
 
 export function getVenue(id) {
