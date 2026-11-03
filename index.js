@@ -1006,23 +1006,28 @@ function renderArchive() {
         return;
     }
 
-    pane.innerHTML = `<div class="jnk-archive-list">${items.map((item) => {
+    // Избранные — сверху (новые первыми), под ними разделитель «Остальные»
+    const favorites = items.filter((i) => i.favorite).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    const rest = items.filter((i) => !i.favorite);
+    const rowHtml = (item) => {
         const meta = [
             formatLabel(item.format, item.venue),
             item.range ? `Сообщения ${item.range.from}–${item.range.to}` : (String(item.text || '').trim() ? '' : 'Пустая тестовая запись'),
             formatDate(item.createdAt),
         ].filter(Boolean).join(' · ');
         return `
-            <div class="jnk-archive-item" data-id="${escapeHtml(item.id)}" tabindex="0" role="button">
+            <div class="jnk-archive-item ${item.favorite ? 'jnk-archive-fav' : ''}" data-id="${escapeHtml(item.id)}" tabindex="0" role="button">
                 <div class="jnk-archive-main">
-                    <div class="jnk-archive-title">${escapeHtml(item.title || defaultTitle(item.range))}</div>
+                    <div class="jnk-archive-title">${item.favorite ? '<span class="jnk-fav-mark">★</span>' : ''}${escapeHtml(item.title || defaultTitle(item.range))}</div>
                     <div class="jnk-archive-meta">${escapeHtml(meta)}</div>
                 </div>
                 <button class="jnk-icon-btn jnk-delete" type="button" title="Удалить из архива">
                     <i class="fa-solid fa-trash-can"></i>
                 </button>
             </div>`;
-    }).join('')}</div>`;
+    };
+    const divider = favorites.length && rest.length ? '<div class="jnk-archive-divider"><span>Остальные</span></div>' : '';
+    pane.innerHTML = `<div class="jnk-archive-list">${favorites.map(rowHtml).join('')}${divider}${rest.map(rowHtml).join('')}</div>`;
 
     pane.querySelectorAll('.jnk-archive-item').forEach((row) => {
         const open = () => {
@@ -1046,6 +1051,7 @@ function renderArchiveViewer(pane, item) {
         <div class="jnk-viewer-bar">
             <button class="jnk-btn jnk-back" type="button"><i class="fa-solid fa-arrow-left"></i> Все интервью</button>
             <div class="jnk-viewer-actions">
+                <button class="jnk-btn jnk-fav ${item.favorite ? 'jnk-fav-on' : ''}" type="button" title="${item.favorite ? 'Убрать из избранного' : 'В избранное'}">${item.favorite ? '★' : '☆'}</button>
                 ${item.studio === 'characters' || !String(item.text || '').trim() ? '' : '<button class="jnk-btn jnk-pin" type="button">📌 Закрепить каст</button>'}
                 <button class="jnk-btn jnk-copy" type="button"><i class="fa-regular fa-copy"></i> Скопировать</button>
                 <button class="jnk-btn jnk-btn-danger jnk-remove" type="button"><i class="fa-solid fa-trash-can"></i> Удалить</button>
@@ -1065,6 +1071,7 @@ function renderArchiveViewer(pane, item) {
     });
     pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
     pane.querySelector('.jnk-pin')?.addEventListener('click', () => pinCast(item));
+    pane.querySelector('.jnk-fav').addEventListener('click', (e) => toggleFavorite(item.id, e.currentTarget));
     pane.querySelectorAll('.jnk-round-delete').forEach((btn) => {
         btn.addEventListener('click', () => deleteRound(item.id, btn.closest('[data-round]').dataset.round));
     });
@@ -1219,6 +1226,16 @@ async function deleteRound(itemId, roundId) {
     item.rounds = item.rounds.filter((r) => r.id !== roundId);
     await saveChatStore();
     refreshViewer(itemId);
+}
+
+function toggleFavorite(itemId, btn) {
+    const item = getChatStore()?.interviews.find((i) => i.id === itemId);
+    if (!item) return;
+    item.favorite = !item.favorite;
+    saveChatStoreDebounced();
+    btn.classList.toggle('jnk-fav-on', item.favorite);
+    btn.textContent = item.favorite ? '★' : '☆';
+    btn.title = item.favorite ? 'Убрать из избранного' : 'В избранное';
 }
 
 async function pinCast(item) {

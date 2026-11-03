@@ -798,6 +798,41 @@
 
 /* Архив: список и просмотр */
 
+.jnk-fav {
+    min-width: 38px;
+    font-size: 1.1em;
+    line-height: 1;
+}
+
+.jnk-fav.jnk-fav-on {
+    color: var(--SmartThemeQuoteColor);
+    border-color: var(--SmartThemeQuoteColor);
+}
+
+.jnk-fav-mark {
+    margin-right: 6px;
+    color: var(--SmartThemeQuoteColor);
+}
+
+.jnk-archive-divider {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 6px 2px;
+    font-size: 0.78em;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.5;
+}
+
+.jnk-archive-divider::before,
+.jnk-archive-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--SmartThemeBorderColor);
+}
+
 .jnk-archive-item {
     cursor: pointer;
     transition: border-color 0.15s, background 0.15s;
