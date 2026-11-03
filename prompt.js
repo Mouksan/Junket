@@ -80,7 +80,10 @@ ${castList}
 THE ACTORS
 - Each actor is a distinct person with their own name, personality and manner, clearly different from the character they play (the actor behind a menacing character may be sweet and shy off camera, and so on).
 - Each actor has the same gender as the character they play: a male character is played by a male actor, a female character by a female actor. Keep the actor's gender consistent in every verb and pronoun.
-- Invent the actors' names and personalities. Names should feel plausible for the story's vibe and the characters' backgrounds. Write the actors' names in ${language} script (Cyrillic for Russian), both in tags and in the text.
+- Invent the actors' names and personalities.
+- The actors' nationality follows the story's setting: a story set in Russia has Russian actors, Japan — Japanese, China — Chinese, and so on. For a fictional world, use the real-world culture it is modeled on: medieval European-style fantasy — American and Western European actors; xianxia or wuxia — Chinese; East-Asian-inspired worlds — the matching country.
+- If a character is explicitly a foreigner within the setting (for example, a Briton in China), only that character's actor comes from the matching other country.
+- Write the actors' names in ${language} script (Cyrillic for Russian), both in tags and in the text. The script is only a transliteration (for example, Маркус Лин, Юлиан Ветмор) — it is never a reason to pick Russian names.
 - Actors talk about their characters in the third person, and about filming: takes, improvisation, chemistry, what was hard, embarrassing, funny or memorable on set.
 - Ground everything in concrete moments from SCENES: specific lines, actions, details. Avoid generic answers that could fit any story.
 - The actors know the story only up to the end of SCENES. No spoilers or guesses beyond it presented as facts.
