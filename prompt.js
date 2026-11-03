@@ -3,7 +3,7 @@
 
 import { getMainRoles, normalizeCast } from './cast.js';
 import { getList, listQuestions, pickQuestions } from './bank.js';
-import { getFormat, getVenue, getBanter, getFormality, VIBES, normalizeShoot, getLanguage } from './formats.js';
+import { getFormat, getVenue, getBanter, getFormality, VIBES, normalizeShoot, getLanguage, isReaction, getWatchPlace, topicList } from './formats.js';
 import { getSettings } from './store.js';
 
 function formatBlock(shoot) {
@@ -16,11 +16,39 @@ function formatBlock(shoot) {
     return lines.join('\n');
 }
 
+// «Реакция на сцену»: вместо вопросов — моменты, остановки по ходу сцены
+function reactionFormatBlock(shoot) {
+    const lines = [getFormat('reaction').prompt];
+    const place = getWatchPlace(shoot.place);
+    if (place) lines.push(place.prompt);
+    const actors = shoot.studio !== 'characters';
+    lines.push(`Structure:
+- The footage plays in order, and they pause it at exactly ${shoot.questions} moments, in the chronological order of SCENES.
+- Each moment is a concrete beat of SCENES worth stopping on: a line, an action, a look, a turn of events. Pick the juiciest ones; never stop on filler.
+- At each pause they react and discuss it, usually in 2–6 turns. Someone may ask to rewind or replay a bit.
+- ${actors
+        ? 'At each pause the actors recall filming that moment (takes, improvisation, what was hard, funny or embarrassing) and cringe at or gush over their own acting.'
+        : 'At each pause the characters react to themselves on screen: each defends their own version of what happened and why, they argue and call each other out ("you were jealous — look, right there").'}
+- A few closing lines after the last moment are fine.`);
+    lines.push(getBanter(shoot.banter).reaction);
+    return lines.join('\n');
+}
+
+function topicsBlock(shoot) {
+    const topics = topicList(shoot);
+    if (!topics.length) return '';
+    return `\n\nTOPICS THEY MUST DISCUSS
+Each of these must come up. Attach each one to the moment of SCENES where it fits best, or give it a pause of its own. They count toward the ${shoot.questions} moments.
+${topics.map((t) => `- ${t}`).join('\n')}`;
+}
+
 function vibesBlock(shoot) {
     const lines = [];
     for (const group of VIBES) {
         // В режиме «Персонажи» отношения берутся из самой ролки, а не из вайба
         if (group.id === 'chemistry' && shoot.studio === 'characters') continue;
+        // В «Реакции» интервьюера нет
+        if (group.id === 'interviewer' && isReaction(shoot)) continue;
         const option = group.options.find((o) => o.id === shoot.vibes[group.id]);
         if (option) lines.push(`- ${option.prompt}`);
     }
@@ -40,7 +68,7 @@ This is a live conversation, not a series of essays.
 - People interrupt each other, trail off mid-sentence (—), talk over each other and react with quick one-liners ("Ha!", "Oh come on!", "Wait, what?") — written in the interview's language.
 - Several short turns in a row between the actors are normal.`;
     const wild = shoot.banter === 'wild'
-        ? '\n- Let it get messy: overlapping jokes, callbacks to something said earlier, tangents that the interviewer has to rein in.'
+        ? `\n- Let it get messy: overlapping jokes, callbacks to something said earlier, tangents that ${isReaction(shoot) ? 'someone' : 'the interviewer'} has to rein in.`
         : '';
     return `${base}${extra}${wild}`;
 }
@@ -57,6 +85,7 @@ function swearingBlock(shoot, language) {
 
 // Банк вопросов: «именно эти» — случайные N из списка (не хватает — досочинить), «как примеры» — образец тона
 function bankBlock(shoot) {
+    if (isReaction(shoot)) return '';
     const list = getList(shoot.bankId);
     const questions = listQuestions(list);
     if (!questions.length) return '';
@@ -106,9 +135,12 @@ function whoCharacters(people) {
     return people.map((p) => `- ${p.npc ? `${p.name} (supporting character)` : p.name}`).join('\n');
 }
 
-function actorsPart(people, language) {
+function actorsPart(people, language, reaction = false) {
+    const now = reaction
+        ? 'Now the actors watch the edited footage of these scenes together, as described in FORMAT.'
+        : 'Now the actors sit down together for the interview described in FORMAT, about filming these scenes.';
     return `PREMISE
-The roleplay story in the context is treated as a TV series being filmed. Its characters are played by actors. The scenes in SCENES were just filmed. Now the actors sit down together for the interview described in FORMAT, about filming these scenes.
+The roleplay story in the context is treated as a TV series being filmed. Its characters are played by actors. The scenes in SCENES were just filmed. ${now}
 
 WHO IS INTERVIEWED
 ${whoActors(people)}
@@ -125,9 +157,12 @@ THE ACTORS
 - The actors know the story only up to the end of SCENES. No spoilers or guesses beyond it presented as facts.`;
 }
 
-function charactersPart(people) {
+function charactersPart(people, reaction = false) {
+    const premise = reaction
+        ? 'The roleplay story in the context was filmed as a TV series. Now the characters themselves — not actors — watch the footage of SCENES together, as described in FORMAT, and react to what happened and how it was shown.'
+        : 'The roleplay story in the context was filmed as a TV series, and its characters have just watched the footage of SCENES. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about what happened in these scenes and how it was shown.';
     return `PREMISE
-The roleplay story in the context was filmed as a TV series, and its characters have just watched the footage of SCENES. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about what happened in these scenes and how it was shown.
+${premise}
 
 WHO IS INTERVIEWED
 ${whoCharacters(people)}
@@ -150,44 +185,57 @@ export function buildInterviewPrompt({ sourcesText, sceneText, from, to, shoot: 
     const language = getLanguage(getSettings().language).prompt;
     const people = studioPeople(shoot, cast);
     const actors = shoot.studio !== 'characters';
+    const reaction = isReaction(shoot);
+    const piece = reaction ? 'reaction video' : 'interview';
     const example = people[0]?.name || 'Name';
     const speakerTag = actors
-        ? '[A: Actor Name (Character Name)] an actor\'s answer — Character Name exactly as listed in WHO IS INTERVIEWED'
-        : `[A: Speaker Name (Character Name)] a character's answer — Speaker Name is the character's own name in ${language} as the story uses it, Character Name exactly as listed in WHO IS INTERVIEWED`;
+        ? '[A: Actor Name (Character Name)] an actor\'s ' + (reaction ? 'line' : 'answer') + ' — Character Name exactly as listed in WHO IS INTERVIEWED'
+        : `[A: Speaker Name (Character Name)] a character's ${reaction ? 'line' : 'answer'} — Speaker Name is the character's own name in ${language} as the story uses it, Character Name exactly as listed in WHO IS INTERVIEWED`;
 
-    const instruction = `You are writing a fictional ${actors ? 'behind-the-scenes ' : ''}interview.
+    const turnTags = reaction
+        ? `Then the moments, in chronological order. Each moment starts with a marker line:
+[M: number] a short caption of the moment in ${language}, a few words about what happens on screen; the number is the #number of the message in SCENES where this moment happens
+After the marker, every turn starts on a new line with a tag:
+${speakerTag}
+There is no interviewer and there are no [Q] lines.`
+        : `Then every turn starts on a new line with a tag:
+[Q] the interviewer's question or remark
+${speakerTag}`;
 
-${actors ? actorsPart(people, language) : charactersPart(people)}
+    let instruction = `You are writing a fictional ${actors && !reaction ? 'behind-the-scenes ' : ''}${piece}.
+
+${actors ? actorsPart(people, language, reaction) : charactersPart(people, reaction)}
 
 FORMAT
-${formatBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${bankBlock(shoot)}${wishesBlock(shoot)}
+${reaction ? reactionFormatBlock(shoot) : formatBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${bankBlock(shoot)}${reaction ? topicsBlock(shoot) : ''}${wishesBlock(shoot)}
 
 ${rhythmBlock(shoot)}
 
 OUTPUT MARKUP (strict)
 The first line is the headline:
-[TITLE] a catchy headline for this interview in ${language}, in the style of the format; it may quote a memorable line from the interview
-Then every turn starts on a new line with a tag:
-[Q] the interviewer's question or remark
-${speakerTag}
+[TITLE] a catchy headline for this ${piece} in ${language}, in the style of the format; it may quote a memorable line from it
+${turnTags}
 A turn may span several paragraphs until the next tag.
 Stage directions go in *asterisks* inside a turn: *laughs*, *covers face with both hands*. Emoji are allowed sparingly inside stage directions.
 Start immediately with the [TITLE] line. No preamble, no closing notes.
 
 NAMES
 - In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: ${actors ? 'Actor Name' : 'Speaker Name'} (${example})]. Never translate, transliterate or decline it.
-- Everywhere else — in questions, answers and stage directions — use every name (characters, NPCs, places) in the form the story itself uses in SCENES, in ${language} and declined according to ${language} grammar. The character card, persona and lorebooks may spell names in another script; do not copy those spellings into the text.
+- Everywhere else — in ${reaction ? 'captions, lines' : 'questions, answers'} and stage directions — use every name (characters, NPCs, places) in the form the story itself uses in SCENES, in ${language} and declined according to ${language} grammar. The character card, persona and lorebooks may spell names in another script; do not copy those spellings into the text.
 - If a name never appears in SCENES, transliterate it into ${language} the way the story would.
 
 LANGUAGE
-Write the whole interview in ${language}, except the character names inside the [A: …] tag parentheses.
+Write the whole ${piece} in ${language}, except the character names inside the [A: …] tag parentheses.
 No words or phrases in other languages: no English (or any other) interjections, catchphrases or quotes mixed in. Everything is said in ${language}.`;
+
+    // В «Реакции» людей не интервьюируют — они смотрят
+    if (reaction) instruction = instruction.replaceAll('WHO IS INTERVIEWED', 'WHO IS WATCHING');
 
     const contextText = `${sourcesText ? `${sourcesText}\n\n` : ''}# SCENES (messages #${from}–#${to})
 ${sceneText}
 
 # TASK
-Write the interview now, following the instruction exactly.`;
+Write the ${piece} now, following the instruction exactly.`;
 
     return { instruction, contextText };
 }

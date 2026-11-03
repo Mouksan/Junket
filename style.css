@@ -677,6 +677,20 @@
     margin: 0;
 }
 
+/* Вложенные блоки «Как снимаем» (площадка фанатов, поля «Реакции») — с тем же шагом, что и секция */
+.jnk-venue,
+.jnk-reaction {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.jnk-venue[hidden],
+.jnk-reaction[hidden],
+.jnk-bank-wrap[hidden] {
+    display: none;
+}
+
 .jnk-subtitle {
     margin-top: 4px;
     font-size: 0.9em;
@@ -2650,6 +2664,118 @@
 
 .jnk-th-subtitles .jnk-cm:last-child {
     border-bottom: 1px solid var(--jnk-rule);
+}
+
+/* --- Моменты «Реакции на сцену» во всех темах --- */
+
+.jnk-mo {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-top: 6px;
+    font-size: 0.88em;
+}
+
+.jnk-mo::after {
+    content: '';
+    flex: 1;
+    min-width: 20px;
+    height: 1px;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 40%, transparent);
+}
+
+.jnk-mo-badge {
+    flex-shrink: 0;
+    padding: 2px 10px;
+    color: var(--SmartThemeQuoteColor);
+    font-weight: 700;
+    font-variant-numeric: tabular-nums;
+    border: 1px solid var(--SmartThemeQuoteColor);
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 12%, transparent);
+}
+
+.jnk-mo-cap {
+    font-style: italic;
+    opacity: 0.8;
+}
+
+.jnk-msg-moment {
+    align-self: center;
+    margin: 12px 0 4px;
+    text-align: center;
+}
+
+.jnk-msg-moment > span {
+    display: inline-block;
+    padding: 3px 12px;
+    font-size: 0.85em;
+    font-weight: 600;
+    border-radius: 999px;
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 16%, transparent);
+}
+
+.jnk-np-moment {
+    margin: 0.7em 0 0.4em;
+    padding: 3px 0;
+    font-size: 0.9em;
+    font-style: italic;
+    font-weight: 700;
+    text-align: center;
+    border-top: 1px solid var(--jnk-rule);
+    border-bottom: 1px solid var(--jnk-rule);
+    break-inside: avoid;
+    break-after: avoid;
+}
+
+.jnk-sc-insert {
+    margin-top: 10px;
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.jnk-ds-moment {
+    margin-top: 8px;
+    padding-bottom: 2px;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    border-bottom: 1px dashed var(--jnk-rule);
+}
+
+.jnk-sr-moment {
+    margin-top: 6px;
+    color: var(--jnk-accent);
+    font-style: italic;
+    font-weight: 700;
+    text-align: center;
+}
+
+.jnk-tw-marker {
+    margin: 6px 0 2px;
+    padding: 3px 8px;
+    color: var(--jnk-muted);
+    font-size: 0.8em;
+    font-weight: 700;
+    border-top: 1px solid var(--jnk-rule);
+}
+
+.jnk-tv-moment {
+    align-self: center;
+    margin-top: 10px;
+    color: var(--jnk-muted);
+    font-size: 0.85em;
+    letter-spacing: 0.5px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.jnk-tv-tc {
+    margin-right: 4px;
+    padding: 1px 8px;
+    color: #111;
+    font-weight: 700;
+    background: var(--jnk-voice);
 }
 
 /* Темы на телефоне */

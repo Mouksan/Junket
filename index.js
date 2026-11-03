@@ -29,7 +29,7 @@ import { getTheme, normalizePaper, stageClass } from './themes.js';
 import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle, fullInterviewText } from './render.js';
 import {
     FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, BANK_MODES, QUESTIONS_MIN, QUESTIONS_MAX,
-    getFormat, normalizeShoot, formatLabel,
+    getFormat, normalizeShoot, formatLabel, isReaction, WATCH_PLACES, MOMENTS_MAX,
 } from './formats.js';
 import { getMainRoles, normalizeCast, newNpc, invitableNpcs, castFromTurns, applyCast } from './cast.js';
 import { getBank, getList, listQuestions, addList, updateList, deleteList, questionsWord } from './bank.js';
@@ -401,8 +401,15 @@ function chipsHtml(items, selectedId, attr) {
 function shootSectionHtml() {
     const shoot = getShoot();
     // «Актёры между собой» в режиме «Персонажи» не нужны: у героев своя динамика из ролки
+    // «Интервьюер» не нужен в «Реакции»: там интервьюера нет
+    const reaction = isReaction(shoot);
+    const rowAttrs = (id) => {
+        if (id === 'chemistry') return `data-actors-only ${shoot.studio === 'characters' ? 'hidden' : ''}`;
+        if (id === 'interviewer') return `data-no-reaction ${reaction ? 'hidden' : ''}`;
+        return '';
+    };
     const vibeRows = VIBES.map((group) => `
-        <div class="jnk-vibe-row" ${group.id === 'chemistry' ? `data-actors-only ${shoot.studio === 'characters' ? 'hidden' : ''}` : ''}>
+        <div class="jnk-vibe-row" ${rowAttrs(group.id)}>
             <span class="jnk-vibe-name">${escapeHtml(group.label)}</span>
             <div class="jnk-chips" data-vibe-group="${group.id}">
                 ${chipsHtml(group.options, shoot.vibes[group.id], 'data-vibe')}
@@ -427,13 +434,25 @@ function shootSectionHtml() {
                 <div class="jnk-chips">${chipsHtml(FAN_VENUES, shoot.venue, 'data-venue')}</div>
             </div>
 
-            <div class="jnk-questions">
-                <label class="jnk-subtitle" for="jnk_questions">Вопросов: <span class="jnk-qcount">${shoot.questions}</span></label>
-                <input id="jnk_questions" class="jnk-range-slider" type="range" min="${QUESTIONS_MIN}" max="${QUESTIONS_MAX}" step="1" value="${shoot.questions}">
-                <div class="jnk-hint">Уточнения и болтовня между вопросами не считаются.</div>
+            <div class="jnk-reaction" ${reaction ? '' : 'hidden'}>
+                <div class="jnk-subtitle">Где смотрят</div>
+                <div class="jnk-chips" data-place-group>${chipsHtml(WATCH_PLACES, shoot.place, 'data-place')}</div>
+                <div class="jnk-hint">Ничего не выбрано — как решит модель.</div>
             </div>
 
-            ${bankRowHtml(shoot)}
+            <div class="jnk-questions">
+                <label class="jnk-subtitle" for="jnk_questions"><span class="jnk-qlabel">${reaction ? 'Моментов' : 'Вопросов'}</span>: <span class="jnk-qcount">${shoot.questions}</span></label>
+                <input id="jnk_questions" class="jnk-range-slider" type="range" min="${QUESTIONS_MIN}" max="${reaction ? MOMENTS_MAX : QUESTIONS_MAX}" step="1" value="${shoot.questions}">
+                <div class="jnk-hint jnk-qhint">${questionsHint(reaction)}</div>
+            </div>
+
+            <div class="jnk-reaction" ${reaction ? '' : 'hidden'}>
+                <label class="jnk-subtitle" for="jnk_topics">О чём обязательно поговорить</label>
+                <textarea id="jnk_topics" class="text_pole jnk-wishes" rows="3" placeholder="По одной теме на строку. Например: ревность Кевы">${escapeHtml(shoot.topics)}</textarea>
+                <div class="jnk-hint">Необязательно. Темы входят в число моментов.</div>
+            </div>
+
+            <div class="jnk-bank-wrap" ${reaction ? 'hidden' : ''}>${bankRowHtml(shoot)}</div>
 
             <div class="jnk-subtitle">Болтовня</div>
             <div class="jnk-seg jnk-banter">
@@ -447,6 +466,27 @@ function shootSectionHtml() {
             <label class="jnk-subtitle" for="jnk_wishes">Пожелания</label>
             <textarea id="jnk_wishes" class="text_pole jnk-wishes" rows="2" placeholder="Например: пусть Маркус постоянно спойлерит, а Киллиан его пинает под столом.">${escapeHtml(shoot.wishes)}</textarea>
         </div>`;
+}
+
+function questionsHint(reaction) {
+    return reaction
+        ? 'Остановки по ходу сцены, по порядку. Болтовня на паузах не считается.'
+        : 'Уточнения и болтовня между вопросами не считаются.';
+}
+
+/** Переключение формата: «Реакция» прячет вопросы, банк и интервьюера, показывает свои поля. */
+function applyFormatUi(section, shoot) {
+    const reaction = isReaction(shoot);
+    section.querySelector('.jnk-venue').hidden = shoot.format !== 'fans';
+    section.querySelectorAll('.jnk-reaction').forEach((el) => { el.hidden = !reaction; });
+    section.querySelector('.jnk-bank-wrap').hidden = reaction;
+    section.querySelectorAll('[data-no-reaction]').forEach((row) => { row.hidden = reaction; });
+    section.querySelector('.jnk-qlabel').textContent = reaction ? 'Моментов' : 'Вопросов';
+    section.querySelector('.jnk-qhint').textContent = questionsHint(reaction);
+    const slider = section.querySelector('#jnk_questions');
+    slider.max = reaction ? MOMENTS_MAX : QUESTIONS_MAX;
+    slider.value = shoot.questions;
+    section.querySelector('.jnk-qcount').textContent = shoot.questions;
 }
 
 // ---------- Банк вопросов: строчка в «Как снимаем» ----------
@@ -527,9 +567,12 @@ function bindShootSection(pane) {
             shoot.format = btn.dataset.format;
             shoot.questions = getFormat(shoot.format).questions;
             setOn('[data-format]', btn);
-            section.querySelector('.jnk-venue').hidden = shoot.format !== 'fans';
-            section.querySelector('#jnk_questions').value = shoot.questions;
-            section.querySelector('.jnk-qcount').textContent = shoot.questions;
+            applyFormatUi(section, shoot);
+        } else if (btn.dataset.place) {
+            // Повторный клик снимает выбор — «не важно»
+            const turnOff = shoot.place === btn.dataset.place;
+            shoot.place = turnOff ? null : btn.dataset.place;
+            section.querySelectorAll('[data-place]').forEach((b) => b.classList.toggle('jnk-chip-on', !turnOff && b === btn));
         } else if (btn.dataset.venue) {
             shoot.venue = btn.dataset.venue;
             setOn('[data-venue]', btn);
@@ -574,6 +617,13 @@ function bindShootSection(pane) {
     wishes.addEventListener('input', () => {
         const shoot = getShoot();
         shoot.wishes = wishes.value;
+        saveShoot(shoot);
+    });
+
+    const topics = section.querySelector('#jnk_topics');
+    topics.addEventListener('input', () => {
+        const shoot = getShoot();
+        shoot.topics = topics.value;
         saveShoot(shoot);
     });
 }
@@ -776,7 +826,7 @@ async function onGoClick() {
         if (sources.droppedEntries) {
             toastr.warning(`Лорбуки не влезли в лимит, отрезано записей: ${sources.droppedEntries}`, TOAST_TITLE);
         }
-        toastr.success('Интервью снято и лежит в архиве 🎬', TOAST_TITLE);
+        toastr.success(isReaction(shoot) ? 'Реакция снята и лежит в архиве 👀' : 'Интервью снято и лежит в архиве 🎬', TOAST_TITLE);
     } catch (error) {
         if (controller.signal.aborted || error?.name === 'AbortError') {
             if (!controller.junketQuiet) toastr.info('Генерация остановлена', TOAST_TITLE);
@@ -1130,7 +1180,7 @@ function renderArchiveViewer(pane, item) {
             ${renderInterviewHtml(item, { theme: theme.id, paper })}
             ${renderFeedHtml(item.feed, theme.id)}
         </div>
-        ${String(item.text || '').trim() ? audiencePanelHtml(item) : ''}`;
+        ${String(item.text || '').trim() && !isReaction(item.format) ? audiencePanelHtml(item) : ''}`;
 
     pane.querySelector('.jnk-back').addEventListener('click', () => {
         archiveOpenId = null;

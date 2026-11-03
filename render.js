@@ -5,6 +5,7 @@
 //   [Q] вопрос интервьюера
 //   [A: Актёр (Veyne)] ответ актёра — в скобках имя из карточки/персоны
 //   [F: @ник] вопрос из зала (раунды «Вопросов из зала»)
+//   [M: 545] подпись момента («Реакция на сцену»: остановка на сообщении #545)
 // Внутри реплик: *ремарка*, **жирное**, абзацы через пустую строку.
 
 import { ctx, escapeHtml, formatDate } from './store.js';
@@ -16,11 +17,12 @@ import { user_avatar } from '../../../personas.js';
 // Цвета для актёров сверх первых двух (перс — цвет цитат темы, персона — цвет выделения)
 const EXTRA_COLORS = ['#7fb3d5', '#c39bd3', '#82c9a5', '#e6b673', '#e59a9a', '#8fc1c4'];
 
-const TAG_RE = /^\s*\[(TITLE|Q|A|F)(?:\s*:\s*([^\]]*))?\]\s*(.*)$/i;
+const TAG_RE = /^\s*\[(TITLE|Q|A|F|M)(?:\s*:\s*([^\]]*))?\]\s*(.*)$/i;
 
 /**
  * Разбирает сырой текст.
- * Возвращает { title, turns: [{ kind: 'q' | 'a' | 'f', actor, character, body }] }.
+ * Возвращает { title, turns: [{ kind: 'q' | 'a' | 'f' | 'm', actor, character, body }] }.
+ * У момента ('m') в actor — номер сообщения, в body — подпись.
  * Если реплик нет совсем — turns пустой (тогда показываем текст как есть).
  */
 export function parseInterview(text) {
@@ -37,7 +39,9 @@ export function parseInterview(text) {
                 current = null;
                 continue;
             }
-            if (tag === 'Q') {
+            if (tag === 'M') {
+                current = { kind: 'm', actor: String(m[2] || '').replace(/[^\d]/g, ''), character: '', lines: [rest] };
+            } else if (tag === 'Q') {
                 current = { kind: 'q', actor: '', character: '', lines: [rest] };
             } else if (tag === 'F') {
                 current = { kind: 'f', actor: String(m[2] || '').trim() || 'Из зала', character: '', lines: [rest] };
@@ -61,7 +65,7 @@ export function parseInterview(text) {
         turn.body = turn.lines.join('\n').trim();
         delete turn.lines;
     }
-    result.turns = result.turns.filter((t) => t.body);
+    result.turns = result.turns.filter((t) => t.body || (t.kind === 'm' && t.actor));
     return result;
 }
 
@@ -339,13 +343,53 @@ function speakerName(turn) {
     return turn.character ? `${turn.actor} (${turn.character})` : turn.actor;
 }
 
+// ---------- Моменты «Реакции на сцену» ----------
+
+const MOMENT_HTML = {
+    magazine: (n, cap) => `<div class="jnk-mo"><span class="jnk-mo-badge">⏸ ${n}</span>${cap ? `<span class="jnk-mo-cap">${cap}</span>` : ''}</div>`,
+    messenger: (n, cap) => `<div class="jnk-msg-moment"><span>⏸ ${n}${cap ? ` · ${cap}` : ''}</span></div>`,
+    newspaper: (n, cap) => `<div class="jnk-np-moment">Кадр ${n}${cap ? `: ${cap}` : ''}</div>`,
+    script: (n, cap) => `<div class="jnk-sc-insert">Вставка — экран${cap ? `: ${cap}` : ''} (${n})</div>`,
+    dossier: (n, cap) => `<div class="jnk-ds-moment">Эпизод ${n.replace('#', '№ ')}${cap ? `. ${cap}` : ''}</div>`,
+    scroll: (n, cap) => `<div class="jnk-sr-moment">❧ ${n}${cap ? ` · ${cap}` : ''}</div>`,
+    stream: (n, cap) => `<div class="jnk-tw-marker">▶ Маркер ${n}${cap ? ` — ${cap}` : ''}</div>`,
+    subtitles: (n, cap) => `<div class="jnk-tv-moment"><span class="jnk-tv-tc">⏸ ${n}</span>${cap ? ` ${cap}` : ''}</div>`,
+};
+
+function momentHtml(turn, theme) {
+    const n = turn.actor ? `#${turn.actor}` : '⏸';
+    const cap = inlineHtml(String(turn.body || '').replace(/\s*\n\s*/g, ' ').trim());
+    return (MOMENT_HTML[theme] || MOMENT_HTML.magazine)(n, cap);
+}
+
+/** Режет реплики на куски между моментами: момент рисуется плашкой, куски — темой как обычно. */
 function turnsHtml(turns, cast, ownNick, env) {
+    if (!turns.some((t) => t.kind === 'm')) return themedTurns(turns, cast, ownNick, env);
+    const out = [];
+    let chunk = [];
+    const flush = () => {
+        if (chunk.length) out.push(themedTurns(chunk, cast, ownNick, env));
+        chunk = [];
+    };
+    for (const turn of turns) {
+        if (turn.kind === 'm') {
+            flush();
+            out.push(momentHtml(turn, env.theme));
+        } else {
+            chunk.push(turn);
+        }
+    }
+    flush();
+    return out.join('');
+}
+
+function themedTurns(turns, cast, ownNick, env) {
     const own = String(ownNick || '').trim().toLowerCase();
     if (env.theme === 'messenger') return messengerTurns(turns, cast, own, env);
     if (env.theme === 'newspaper') return newspaperTurns(turns, own);
     if (env.theme === 'script') return scriptTurns(turns, own);
     if (env.theme === 'dossier') return dossierTurns(turns, own);
-    if (env.theme === 'scroll') return scrollTurns(turns, own);
+    if (env.theme === 'scroll') return scrollTurns(turns, own, env);
     if (env.theme === 'stream') return streamTurns(turns, own);
     if (env.theme === 'subtitles') return subtitleTurns(turns, cast, own);
     return magazineTurns(turns, cast, own);
@@ -470,8 +514,7 @@ function dossierTurns(turns, own) {
 }
 
 /** Свиток: «Летописец», имена киноварью на отдельной строке, у первого ответа буквица. */
-function scrollTurns(turns, own) {
-    let firstAnswer = true;
+function scrollTurns(turns, own, env) {
     return turns.map((turn) => {
         if (turn.kind === 'q') {
             const lead = '<span class="jnk-sr-label">Летописец:</span> ';
@@ -483,8 +526,9 @@ function scrollTurns(turns, own) {
             return `<div class="jnk-sr-f jnk-iv-text ${isOwn ? 'jnk-own' : ''}">${bodyHtml(turn.body, lead)}</div>`;
         }
         // Буквица — у первого ответа, который начинается не с ремарки (иначе она съест букву ремарки)
-        const first = firstAnswer && !/^\*/.test(turn.body.trim());
-        if (first) firstAnswer = false;
+        // env.capDone — буквица одна на всё интервью, даже если реплики порезаны моментами
+        const first = !env.capDone && !/^\*/.test(turn.body.trim());
+        if (first) env.capDone = true;
         return `
             <div class="jnk-sr-a ${first ? 'jnk-sr-first' : ''}">
                 <div class="jnk-sr-name">${escapeHtml(turn.actor)}${turn.character ? ` <span class="jnk-sr-role">(${escapeHtml(turn.character)})</span>` : ''}</div>
@@ -567,6 +611,7 @@ function plainTurns(text) {
     const parsed = parseInterview(text);
     if (!parsed.turns.length) return String(text || '').trim();
     return parsed.turns.map((turn) => {
+        if (turn.kind === 'm') return `— ⏸ ${turn.actor ? `#${turn.actor}` : ''}${turn.body ? `: ${turn.body}` : ''} —`;
         const who = turn.kind === 'q' ? 'Интервьюер'
             : turn.kind === 'f' ? turn.actor
                 : (turn.character ? `${turn.actor} (${turn.character})` : turn.actor);

@@ -153,7 +153,7 @@ export function stripPreamble(text) {
     out = out.replace(/^[\s\S]*?<\/(?:think|thinking|reasoning|thought|rp_preflight)>/i, '').trim();
     out = out.replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/, '').trim();
     // Всё, что до первой реплики интервью, — вступление модели.
-    const firstTag = out.search(/^\s*\[(?:TITLE|Q|A|F)\b/im);
+    const firstTag = out.search(/^\s*\[(?:TITLE|Q|A|F|M)\b/im);
     if (firstTag > 0) out = out.slice(firstTag).trim();
     return out;
 }

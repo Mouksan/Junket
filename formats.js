@@ -54,6 +54,28 @@ Formality: informal and playful.`,
         questions: 6,
         prompt: `A tabloid interview: the journalist digs for gossip, ships the actors with each other, asks provocative and loaded questions and tries to catch them off guard. The actors dodge, deflect and sometimes slip.`,
     },
+    {
+        id: 'reaction',
+        formality: 'informal',
+        icon: '👀',
+        label: 'Реакция на сцену',
+        questions: 6,          // здесь это моменты — остановки по ходу сцены
+        prompt: `A reaction video, like a commentary track: they watch the footage of SCENES together and react out loud. There is no interviewer, no host and no audience: only the people listed in WHO IS WATCHING, talking to each other.
+Formality: completely informal. Teasing, fandom jokes, slang and swearing are welcome.`,
+    },
+];
+
+/** «Реакция на сцену»: без интервьюера, вместо вопросов — моменты. */
+export function isReaction(shootOrFormat) {
+    const id = typeof shootOrFormat === 'string' ? shootOrFormat : shootOrFormat?.format;
+    return id === 'reaction';
+}
+
+// Только для «Реакции»: где смотрят. Ничего не выбрано — модель решает сама
+export const WATCH_PLACES = [
+    { id: 'studio', label: 'Студия', prompt: 'They watch in a studio, on camera, with a small crew around them.' },
+    { id: 'home', label: 'Диван дома', prompt: 'They watch at home on a couch, with snacks and drinks: relaxed, unfiltered, nobody is filming them.' },
+    { id: 'screening', label: 'Закрытый показ', prompt: 'They watch at a private screening in a small, dark cinema hall, seated next to each other, whispering and reacting.' },
 ];
 
 // Только для «Вопросов фанатов»: где проходит встреча — от этого градус
@@ -83,16 +105,19 @@ export const BANTER = [
         id: 'tight',
         label: 'По делу',
         prompt: 'Banter: none. Question, answers, next question. No follow-ups.',
+        reaction: 'Banter: minimal. Short reactions at each pause, then they press play again.',
     },
     {
         id: 'light',
         label: 'Немного',
         prompt: 'Banter: light. The interviewer may occasionally follow up on an answer, and the actors may tease each other or react to each other\'s answers.',
+        reaction: 'Banter: light. They react, tease each other and argue a little at each pause, then move on.',
     },
     {
         id: 'wild',
         label: 'Понеслось',
         prompt: 'Banter: free. Any topic may turn into a back-and-forth discussion over several turns; the actors interrupt each other and go on tangents, and the interviewer follows the fun threads.',
+        reaction: 'Banter: free. Any pause may spiral into a long argument or tangent; they forget to press play, rewind to rewatch a bit, and bring up earlier moments again.',
     },
 ];
 
@@ -142,6 +167,7 @@ export const BANK_MODES = [
 
 export const QUESTIONS_MIN = 3;
 export const QUESTIONS_MAX = 15;
+export const MOMENTS_MAX = 12;    // у «Реакции» потолок моментов ниже
 
 export function getFormat(id) {
     return FORMATS.find((f) => f.id === id) || FORMATS[0];
@@ -173,7 +199,18 @@ export function defaultShoot() {
         guests: [],     // id НПС из каста, позванных в это интервью
         bankId: null,   // выбранный список из банка вопросов (null — не использовать)
         bankMode: 'examples',   // 'exact' — задать именно эти, 'examples' — как примеры
+        topics: '',     // «Реакция»: о чём обязательно поговорить, по строке на тему
+        place: null,    // «Реакция»: где смотрят (null — не важно)
     };
+}
+
+export function getWatchPlace(id) {
+    return WATCH_PLACES.find((p) => p.id === id) || null;
+}
+
+/** Зацепки «Реакции» списком: непустые строки. */
+export function topicList(shoot) {
+    return String(shoot?.topics || '').split('\n').map((t) => t.trim()).filter(Boolean);
 }
 
 /** Приводит сохранённый в чате выбор к правильному виду (что-то могло пропасть или устареть). */
@@ -183,7 +220,7 @@ export function normalizeShoot(saved) {
     const format = FORMATS.some((f) => f.id === s.format) ? s.format : base.format;
     let questions = Math.round(Number(s.questions));
     if (!Number.isFinite(questions)) questions = getFormat(format).questions;
-    questions = Math.min(QUESTIONS_MAX, Math.max(QUESTIONS_MIN, questions));
+    questions = Math.min(isReaction(format) ? MOMENTS_MAX : QUESTIONS_MAX, Math.max(QUESTIONS_MIN, questions));
     const vibes = {};
     for (const group of VIBES) {
         const value = s.vibes?.[group.id];
@@ -200,6 +237,8 @@ export function normalizeShoot(saved) {
         guests: Array.isArray(s.guests) ? s.guests.filter((g) => typeof g === 'string') : [],
         bankId: typeof s.bankId === 'string' && s.bankId ? s.bankId : null,
         bankMode: s.bankMode === 'exact' ? 'exact' : 'examples',
+        topics: typeof s.topics === 'string' ? s.topics : '',
+        place: getWatchPlace(s.place) ? s.place : null,
     };
 }
 
