@@ -2120,6 +2120,538 @@
     border-top: 1px dashed var(--jnk-rule);
 }
 
+/* --- Свиток --- */
+
+.jnk-th-scroll.jnk-paper-day {
+    --jnk-paper-bg: #ecdcb4;
+    --jnk-ink: #3a2a14;
+    --jnk-muted: #7a5c2e;
+    --jnk-rule: #b08d57;
+    --jnk-accent: #8b1e1e;
+    --jnk-edge: rgba(120, 80, 30, 0.38);
+    --jnk-rod: #6b4a22;
+}
+
+.jnk-th-scroll.jnk-paper-night {
+    /* Чернильная ночь: тёмно-синяя бумага, золото */
+    --jnk-paper-bg: #161a26;
+    --jnk-ink: #e8e0cc;
+    --jnk-muted: #9ea6b8;
+    --jnk-rule: #4a5168;
+    --jnk-accent: #d9b96a;
+    --jnk-edge: rgba(0, 0, 0, 0.45);
+    --jnk-rod: #8f7638;
+    border-left: 1px solid color-mix(in srgb, var(--jnk-accent) 22%, transparent);
+    border-right: 1px solid color-mix(in srgb, var(--jnk-accent) 22%, transparent);
+}
+
+.jnk-th-scroll {
+    position: relative;
+    padding: 30px;
+    font-family: 'JNK Cormorant', Georgia, serif;
+    font-size: 1.08em;
+    font-weight: 500;
+    border-radius: 2px;
+    box-shadow: inset 0 0 50px var(--jnk-edge), 0 8px 24px rgba(0, 0, 0, 0.25);
+}
+
+/* Скалки свитка сверху и снизу */
+.jnk-th-scroll::before,
+.jnk-th-scroll::after {
+    content: '';
+    position: absolute;
+    left: -6px;
+    right: -6px;
+    height: 12px;
+    border-radius: 6px;
+    background: var(--jnk-rod);
+}
+
+.jnk-th-scroll::before {
+    top: -6px;
+}
+
+.jnk-th-scroll::after {
+    bottom: -6px;
+}
+
+.jnk-th-scroll .jnk-sr-head {
+    padding: 0;
+    text-align: center;
+    border: none;
+}
+
+.jnk-th-scroll .jnk-iv-title {
+    margin: 0;
+    font-size: 1.7em;
+    font-weight: 700;
+    line-height: 1.2;
+}
+
+.jnk-sr-orn {
+    margin: 6px 0 4px;
+    color: var(--jnk-accent);
+    font-size: 1.1em;
+    letter-spacing: 6px;
+}
+
+.jnk-th-scroll .jnk-iv-meta {
+    font-size: 0.85em;
+    font-variant: small-caps;
+    letter-spacing: 0.5px;
+}
+
+.jnk-th-scroll .jnk-iv-turns {
+    gap: 14px;
+}
+
+.jnk-th-scroll .jnk-iv-text p {
+    line-height: 1.5;
+}
+
+.jnk-sr-q,
+.jnk-sr-f {
+    font-style: italic;
+}
+
+.jnk-sr-label {
+    color: var(--jnk-muted);
+    font-style: normal;
+    font-variant: small-caps;
+    font-weight: 700;
+    letter-spacing: 0.4px;
+}
+
+.jnk-sr-name {
+    margin-bottom: 2px;
+    color: var(--jnk-accent);
+    font-family: 'JNK Marck Script', cursive;
+    font-size: 1.45em;
+    line-height: 1.1;
+}
+
+.jnk-sr-role {
+    color: var(--jnk-muted);
+    font-family: 'JNK Cormorant', Georgia, serif;
+    font-size: 0.62em;
+    font-style: italic;
+}
+
+.jnk-th-scroll .jnk-iv > .jnk-iv-turns > .jnk-sr-first .jnk-iv-text > p:first-child::first-letter {
+    float: left;
+    padding: 6px 8px 0 0;
+    color: var(--jnk-accent);
+    font-family: 'JNK Marck Script', cursive;
+    font-size: 3.3em;
+    font-style: normal;
+    line-height: 0.8;
+}
+
+.jnk-sr-f.jnk-own {
+    padding: 6px 10px;
+    border: 1px solid var(--jnk-rule);
+    border-radius: 2px;
+}
+
+.jnk-th-scroll .jnk-round {
+    gap: 10px;
+    padding-top: 4px;
+    border-top: none;
+}
+
+.jnk-th-scroll .jnk-round-head {
+    position: relative;
+    justify-content: center;
+    color: var(--jnk-accent);
+    font-size: 1.05em;
+    letter-spacing: 1px;
+    text-transform: none;
+}
+
+.jnk-th-scroll .jnk-round-head .jnk-icon-btn,
+.jnk-th-subtitles .jnk-round-head .jnk-icon-btn {
+    position: absolute;
+    right: 0;
+}
+
+.jnk-th-scroll .jnk-feed {
+    border-top: 1px solid var(--jnk-rule);
+}
+
+.jnk-th-scroll .jnk-cm-text {
+    font-style: italic;
+}
+
+/* --- Стрим-чат --- */
+
+.jnk-th-stream.jnk-paper-day {
+    --jnk-paper-bg: #f7f7f8;
+    --jnk-ink: #0e0e10;
+    --jnk-muted: #53535f;
+    --jnk-rule: #d3d3d9;
+    --jnk-sat: 72%;
+    --jnk-lit: 38%;
+    --jnk-hl: rgba(145, 71, 255, 0.12);
+}
+
+.jnk-th-stream.jnk-paper-night {
+    --jnk-paper-bg: #18181b;
+    --jnk-ink: #efeff1;
+    --jnk-muted: #adadb8;
+    --jnk-rule: #35353b;
+    --jnk-sat: 85%;
+    --jnk-lit: 70%;
+    --jnk-hl: rgba(145, 71, 255, 0.24);
+}
+
+.jnk-th-stream {
+    padding: 14px 16px;
+    font-family: 'JNK PT Sans', Arial, sans-serif;
+    border-radius: 8px;
+}
+
+.jnk-th-stream .jnk-tw-head {
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--jnk-rule);
+}
+
+.jnk-tw-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.jnk-tw-live {
+    flex-shrink: 0;
+    padding: 1px 6px;
+    color: #fff;
+    font-size: 0.75em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    background: #e91916;
+    border-radius: 4px;
+}
+
+.jnk-th-stream .jnk-iv-title {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    font-size: 1.1em;
+    font-weight: 700;
+}
+
+.jnk-tw-viewers {
+    flex-shrink: 0;
+    color: #e91916;
+    font-size: 0.85em;
+    font-weight: 700;
+}
+
+.jnk-th-stream.jnk-paper-night .jnk-tw-viewers {
+    color: #ff6b6b;
+}
+
+.jnk-th-stream .jnk-iv-meta {
+    margin-top: 4px;
+    font-size: 0.78em;
+}
+
+.jnk-th-stream .jnk-iv-turns {
+    gap: 0;
+}
+
+.jnk-tw-line {
+    padding: 4px 8px;
+    font-size: 0.95em;
+    line-height: 1.5;
+    word-break: break-word;
+    border-radius: 4px;
+}
+
+@media (hover: hover) {
+    .jnk-tw-line:hover {
+        background: color-mix(in srgb, var(--jnk-ink) 5%, transparent);
+    }
+}
+
+.jnk-tw-nick,
+.jnk-tw-reply-nick,
+.jnk-th-stream .jnk-dir {
+    color: hsl(var(--jnk-hue) var(--jnk-sat) var(--jnk-lit));
+}
+
+.jnk-tw-nick,
+.jnk-tw-reply-nick {
+    font-weight: 700;
+}
+
+.jnk-th-stream .jnk-dir {
+    font-style: italic;
+}
+
+.jnk-tw-badge {
+    display: inline-block;
+    margin-right: 4px;
+    padding: 0 4px;
+    font-size: 0.72em;
+    font-weight: 700;
+    line-height: 1.5;
+    vertical-align: 1px;
+    border-radius: 3px;
+}
+
+.jnk-tw-host {
+    color: #fff;
+    background: #e91916;
+}
+
+.jnk-tw-mod {
+    color: #fff;
+    background: #00ad03;
+}
+
+.jnk-tw-role {
+    color: hsl(var(--jnk-hue) var(--jnk-sat) var(--jnk-lit));
+    background: hsl(var(--jnk-hue) 60% 50% / 0.14);
+    border: 1px solid hsl(var(--jnk-hue) 60% 50% / 0.45);
+}
+
+.jnk-tw-highlight {
+    margin: 3px 0;
+    background: var(--jnk-hl);
+    border-left: 4px solid #9147ff;
+    border-radius: 0 4px 4px 0;
+}
+
+.jnk-tw-highlight.jnk-own {
+    border-left-color: #00ad03;
+}
+
+.jnk-th-stream .jnk-round {
+    gap: 0;
+    margin-top: 8px;
+    padding-top: 0;
+    border-top: none;
+}
+
+.jnk-th-stream .jnk-round-head {
+    margin-bottom: 4px;
+    padding: 6px 10px;
+    color: #fff;
+    letter-spacing: 0;
+    text-transform: none;
+    background: #9147ff;
+    border-radius: 6px;
+}
+
+.jnk-th-stream .jnk-feed {
+    border-top: 1px solid var(--jnk-rule);
+}
+
+.jnk-th-stream .jnk-feed .jnk-round-head {
+    padding: 0 4px;
+    color: inherit;
+    background: transparent;
+}
+
+.jnk-th-stream .jnk-feed-list {
+    background: transparent;
+    border: none;
+    border-radius: 0;
+}
+
+.jnk-th-stream .jnk-tw-line.jnk-cm {
+    padding: 4px 8px;
+    border-bottom: none;
+}
+
+.jnk-tw-msg.jnk-cm-text {
+    font-size: 1em;
+}
+
+.jnk-tw-reply {
+    margin-bottom: 1px;
+    color: var(--jnk-muted);
+    font-size: 0.78em;
+}
+
+.jnk-tw-reacts {
+    margin-left: 6px;
+    color: var(--jnk-muted);
+    font-size: 0.8em;
+}
+
+.jnk-tw-react {
+    margin-right: 6px;
+    white-space: nowrap;
+}
+
+/* --- Субтитры --- */
+
+.jnk-th-subtitles {
+    --jnk-paper-bg: #202228;
+    --jnk-ink: #ffffff;
+    --jnk-muted: #a8a8b0;
+    --jnk-rule: #3a3a44;
+    --jnk-voice: #ffd84d;
+    font-family: 'JNK PT Sans', Arial, sans-serif;
+    border-radius: 6px;
+}
+
+.jnk-th-subtitles .jnk-redact {
+    background: #000;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.jnk-th-subtitles .jnk-tv-head {
+    padding: 0;
+    text-align: center;
+    border: none;
+}
+
+.jnk-tv-top {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 12px;
+    font-size: 0.72em;
+    font-weight: 700;
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+}
+
+.jnk-tv-rec {
+    color: #ff4d4d;
+}
+
+.jnk-tv-bug {
+    padding: 0 6px;
+    border: 1px solid rgba(255, 255, 255, 0.4);
+    border-radius: 3px;
+    opacity: 0.65;
+}
+
+.jnk-th-subtitles .jnk-iv-title {
+    display: inline-block;
+    margin: 0;
+    padding: 4px 14px;
+    font-size: 1.4em;
+    font-weight: 700;
+    border-bottom: 3px solid var(--jnk-voice);
+}
+
+.jnk-th-subtitles .jnk-iv-meta {
+    margin-top: 8px;
+    font-size: 0.8em;
+}
+
+.jnk-th-subtitles .jnk-iv-turns {
+    gap: 10px;
+}
+
+.jnk-tv-plate {
+    align-self: flex-start;
+    margin-top: 8px;
+    padding: 4px 12px 4px 10px;
+    font-size: 0.82em;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    background: #14151a;
+    border-left: 6px solid var(--jnk-speaker);
+}
+
+.jnk-tv-plate span {
+    color: var(--jnk-muted);
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.jnk-tv-sub {
+    text-align: center;
+}
+
+.jnk-tv-sub p {
+    margin: 0 0 4px;
+    line-height: 1.85;
+}
+
+.jnk-tv-line {
+    padding: 2px 8px;
+    color: #fff;
+    font-size: 1.02em;
+    font-weight: 700;
+    background: rgba(0, 0, 0, 0.75);
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+}
+
+.jnk-tv-voice .jnk-tv-line {
+    color: var(--jnk-voice);
+}
+
+.jnk-th-subtitles .jnk-dir {
+    color: inherit;
+    font-style: normal;
+    text-transform: uppercase;
+}
+
+.jnk-th-subtitles .jnk-dir::before {
+    content: '[';
+}
+
+.jnk-th-subtitles .jnk-dir::after {
+    content: ']';
+}
+
+.jnk-tv-tag {
+    color: var(--jnk-muted);
+    text-transform: uppercase;
+}
+
+.jnk-tv-fan.jnk-own .jnk-tv-line {
+    box-shadow: 0 0 0 2px var(--SmartThemeQuoteColor);
+}
+
+.jnk-tv-fan.jnk-own .jnk-tv-tag {
+    color: var(--SmartThemeQuoteColor);
+}
+
+.jnk-th-subtitles .jnk-round {
+    margin-top: 14px;
+    border-top: none;
+}
+
+.jnk-th-subtitles .jnk-round-head {
+    position: relative;
+    justify-content: center;
+}
+
+.jnk-th-subtitles .jnk-round-head > span {
+    padding: 4px 14px;
+    color: #111;
+    letter-spacing: 1.5px;
+    background: var(--jnk-voice);
+}
+
+.jnk-th-subtitles .jnk-feed {
+    border-top: 1px solid var(--jnk-rule);
+}
+
+.jnk-th-subtitles .jnk-feed-list {
+    gap: 8px;
+    background: transparent;
+    border: none;
+}
+
+.jnk-th-subtitles .jnk-cm {
+    background: #14151a;
+    border: 1px solid var(--jnk-rule);
+    border-radius: 8px;
+}
+
+.jnk-th-subtitles .jnk-cm:last-child {
+    border-bottom: 1px solid var(--jnk-rule);
+}
+
 /* Темы на телефоне */
 
 @media (max-width: 600px) {
@@ -2137,6 +2669,14 @@
 
     .jnk-th-newspaper .jnk-iv-title {
         font-size: 1.6em;
+    }
+
+    .jnk-th-scroll {
+        padding: 22px 18px;
+    }
+
+    .jnk-th-stream {
+        padding: 12px 10px;
     }
 }
 

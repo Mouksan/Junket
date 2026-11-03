@@ -10,6 +10,7 @@
 import { ctx, escapeHtml, formatDate } from './store.js';
 import { formatLabel } from './formats.js';
 import { getTheme, normalizePaper } from './themes.js';
+import { hashHue } from './comments.js';
 import { user_avatar } from '../../../personas.js';
 
 // Цвета для актёров сверх первых двух (перс — цвет цитат темы, персона — цвет выделения)
@@ -156,7 +157,7 @@ export function defaultTitle(range) {
 
 // ---------- Шапки тем ----------
 
-const THEMES_PLAIN = new Set(['newspaper', 'script', 'dossier']);
+const THEMES_PLAIN = new Set(['newspaper', 'script', 'dossier', 'scroll', 'subtitles']);
 const ROMAN = ['I', 'II', 'III', 'IV', 'V', 'VI', 'VII', 'VIII', 'IX', 'X'];
 const APPENDIX = 'БВГДЕЖЗИКЛМНОПРСТУФХЦЧШЭЮЯ';
 
@@ -165,6 +166,13 @@ function protocolNumber(id) {
     let h = 0;
     for (const ch of String(id || '')) h = (h * 31 + ch.charCodeAt(0)) % 9000;
     return String(1000 + h);
+}
+
+/** Зрители стрима — ненастоящие, но стабильные: из id интервью. */
+function viewerCount(id) {
+    let h = 7;
+    for (const ch of String(id || '')) h = (h * 37 + ch.charCodeAt(0)) % 47900;
+    return `${((1000 + h) / 1000).toFixed(1).replace('.', ',')}K`;
 }
 
 function headHtml(env) {
@@ -209,6 +217,37 @@ function headHtml(env) {
             </header>`;
     }
 
+    if (theme === 'scroll') {
+        const sub = [format, range, date].filter(Boolean).join(' · ');
+        return `
+            <header class="jnk-iv-head jnk-sr-head">
+                <h2 class="jnk-iv-title">${title}</h2>
+                <div class="jnk-sr-orn">— ❦ —</div>
+                ${sub ? `<div class="jnk-iv-meta">${escapeHtml(sub)}</div>` : ''}
+            </header>`;
+    }
+    if (theme === 'stream') {
+        const sub = [format, range, date].filter(Boolean).join(' · ');
+        return `
+            <header class="jnk-iv-head jnk-tw-head">
+                <div class="jnk-tw-bar">
+                    <span class="jnk-tw-live">LIVE</span>
+                    <h2 class="jnk-iv-title">${title}</h2>
+                    <span class="jnk-tw-viewers">👁 ${viewerCount(item.id)}</span>
+                </div>
+                ${sub ? `<div class="jnk-iv-meta">${escapeHtml(sub)}</div>` : ''}
+            </header>`;
+    }
+    if (theme === 'subtitles') {
+        const sub = [format, range, date].filter(Boolean).join(' · ');
+        return `
+            <header class="jnk-iv-head jnk-tv-head">
+                <div class="jnk-tv-top"><span class="jnk-tv-rec">● Запись</span><span class="jnk-tv-bug">Junket</span></div>
+                <h2 class="jnk-iv-title">${title}</h2>
+                ${sub ? `<div class="jnk-iv-meta">${escapeHtml(sub)}</div>` : ''}
+            </header>`;
+    }
+
     // Журнал и мессенджер
     const meta = [format, range, date].filter(Boolean).join(' · ');
     return `
@@ -222,6 +261,8 @@ function roundHeadText(theme, i) {
     if (theme === 'newspaper') return `Письма читателей${i > 0 ? ` · ${ROMAN[i] || i + 1}` : ''}`;
     if (theme === 'script') return `Сцена ${i + 2}. Инт. зрительный зал — вопросы из зала`;
     if (theme === 'dossier') return `Приложение ${APPENDIX[i] || i + 1}. Вопросы посторонних лиц`;
+    if (theme === 'scroll') return `❦ Вопросы из зала${i > 0 ? ` · ${ROMAN[i] || i + 1}` : ''} ❦`;
+    if (theme === 'subtitles') return `Вопросы из зала${i > 0 ? ` · часть ${i + 1}` : ''}`;
     return `🎤 Вопросы из зала${i > 0 ? ` · раунд ${i + 1}` : ''}`;
 }
 
@@ -304,6 +345,9 @@ function turnsHtml(turns, cast, ownNick, env) {
     if (env.theme === 'newspaper') return newspaperTurns(turns, own);
     if (env.theme === 'script') return scriptTurns(turns, own);
     if (env.theme === 'dossier') return dossierTurns(turns, own);
+    if (env.theme === 'scroll') return scrollTurns(turns, own);
+    if (env.theme === 'stream') return streamTurns(turns, own);
+    if (env.theme === 'subtitles') return subtitleTurns(turns, cast, own);
     return magazineTurns(turns, cast, own);
 }
 
@@ -422,6 +466,89 @@ function dossierTurns(turns, own) {
                 : speakerName(turn);
         const lead = `<span class="jnk-ds-label">${escapeHtml(label)}:</span> `;
         return `<div class="jnk-ds-turn jnk-ds-${turn.kind} jnk-iv-text ${isOwn ? 'jnk-own' : ''}">${bodyHtml(turn.body, lead)}</div>`;
+    }).join('');
+}
+
+/** Свиток: «Летописец», имена киноварью на отдельной строке, у первого ответа буквица. */
+function scrollTurns(turns, own) {
+    let firstAnswer = true;
+    return turns.map((turn) => {
+        if (turn.kind === 'q') {
+            const lead = '<span class="jnk-sr-label">Летописец:</span> ';
+            return `<div class="jnk-sr-q jnk-iv-text">${bodyHtml(turn.body, lead)}</div>`;
+        }
+        if (turn.kind === 'f') {
+            const isOwn = isOwnTurn(turn, own);
+            const lead = `<span class="jnk-sr-label">${isOwn ? 'Рука автора' : `${escapeHtml(turn.actor)} вопрошает`}:</span> `;
+            return `<div class="jnk-sr-f jnk-iv-text ${isOwn ? 'jnk-own' : ''}">${bodyHtml(turn.body, lead)}</div>`;
+        }
+        // Буквица — у первого ответа, который начинается не с ремарки (иначе она съест букву ремарки)
+        const first = firstAnswer && !/^\*/.test(turn.body.trim());
+        if (first) firstAnswer = false;
+        return `
+            <div class="jnk-sr-a ${first ? 'jnk-sr-first' : ''}">
+                <div class="jnk-sr-name">${escapeHtml(turn.actor)}${turn.character ? ` <span class="jnk-sr-role">(${escapeHtml(turn.character)})</span>` : ''}</div>
+                <div class="jnk-iv-text">${bodyHtml(turn.body)}</div>
+            </div>`;
+    }).join('');
+}
+
+/** Стрим-чат: строчки «ник: текст», каждый абзац — отдельное сообщение. */
+function streamTurns(turns, own) {
+    const HOST_HUE = 268;
+    return turns.map((turn) => {
+        const paras = String(turn.body || '').split(/\n\s*\n/).map((p) => p.trim()).filter(Boolean);
+        let badge = '';
+        let nick = turn.actor;
+        let hue = hashHue((turn.character || turn.actor).toLowerCase());
+        let extra = '';
+        if (turn.kind === 'q') {
+            badge = '<span class="jnk-tw-badge jnk-tw-host" title="Ведущий">🎙</span>';
+            nick = 'Ведущий';
+            hue = HOST_HUE;
+        } else if (turn.kind === 'f') {
+            extra = 'jnk-tw-highlight';
+            if (isOwnTurn(turn, own)) {
+                badge = '<span class="jnk-tw-badge jnk-tw-mod">автор</span>';
+                extra += ' jnk-own';
+            }
+        } else if (turn.character) {
+            badge = `<span class="jnk-tw-badge jnk-tw-role">${escapeHtml(turn.character)}</span>`;
+        }
+        return paras.map((p) => `
+            <div class="jnk-tw-line ${extra}" style="--jnk-hue:${hue}">
+                ${badge}<span class="jnk-tw-nick">${escapeHtml(nick)}</span>: <span class="jnk-tw-msg">${inlineHtml(p).replace(/\n/g, '<br>')}</span>
+            </div>`).join('');
+    }).join('');
+}
+
+/** Субтитры: плашка с именем при смене говорящего, текст — субтитрами по центру. */
+function subtitleTurns(turns, cast, own) {
+    const subs = (body, tag = '') => String(body || '')
+        .split(/\n\s*\n/)
+        .map((p) => p.trim())
+        .filter(Boolean)
+        .map((p, i) => `<p><span class="jnk-tv-line">${i === 0 ? tag : ''}${inlineHtml(p).replace(/\n/g, '<br>')}</span></p>`)
+        .join('');
+    let prevKey = null;
+    return turns.map((turn) => {
+        if (turn.kind === 'q') {
+            prevKey = null;
+            return `<div class="jnk-tv-sub jnk-tv-voice">${subs(turn.body)}</div>`;
+        }
+        if (turn.kind === 'f') {
+            prevKey = null;
+            const isOwn = isOwnTurn(turn, own);
+            const tag = `<span class="jnk-tv-tag">[${isOwn ? 'Автор' : 'Из зала'} · ${escapeHtml(turn.actor)}]</span> `;
+            return `<div class="jnk-tv-sub jnk-tv-fan ${isOwn ? 'jnk-own' : ''}">${subs(turn.body, tag)}</div>`;
+        }
+        const key = (turn.character || turn.actor).trim().toLowerCase();
+        const plate = key === prevKey ? '' : `
+            <div class="jnk-tv-plate" style="--jnk-speaker:${speakerLook(turn, cast).color}">
+                <b>${escapeHtml(turn.actor)}</b>${turn.character ? `<span> · исполнитель роли ${escapeHtml(turn.character)}</span>` : ''}
+            </div>`;
+        prevKey = key;
+        return `${plate}<div class="jnk-tv-sub">${subs(turn.body)}</div>`;
     }).join('');
 }
 

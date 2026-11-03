@@ -353,15 +353,34 @@ function messageHtml(msg) {
         </div>`;
 }
 
+/** Стрим-чат: коммент — строчка «ник: текст», цвет ника по хешу (оттенок подстраивает тема). */
+function streamLineHtml(msg) {
+    const reply = msg.replyTo
+        ? `<div class="jnk-tw-reply">↳ в ответ <span style="--jnk-hue:${hashHue(msg.replyTo)}" class="jnk-tw-reply-nick">@${escapeHtml(msg.replyTo)}</span>${msg.replyQuote ? `: «${escapeHtml(msg.replyQuote)}»` : ''}</div>`
+        : '';
+    const reactions = (msg.reactions || []).slice(0, 6)
+        .map((r) => `<span class="jnk-tw-react">${escapeHtml(r.emoji)}${r.count ? ` ${escapeHtml(r.count)}` : ''}</span>`)
+        .join('');
+    return `
+        <div class="jnk-tw-line jnk-cm">
+            ${reply}
+            <span class="jnk-tw-nick" style="--jnk-hue:${hashHue(msg.username)}">${escapeHtml(msg.username)}</span>: <span class="jnk-tw-msg jnk-cm-text">${formatMessageContent(msg.content)}</span>
+            ${reactions ? `<span class="jnk-tw-reacts">${reactions}</span>` : ''}
+        </div>`;
+}
+
 /** Все комменты ленты подряд (пачки склеены). */
 export function feedMessages(feed) {
     return (Array.isArray(feed) ? feed : []).flatMap((batch) => Array.isArray(batch?.messages) ? batch.messages : []);
 }
 
-// Заголовок ленты под тему: в Газете — отклики, в Досье — перехват
+// Заголовок ленты под тему
 const FEED_TITLES = {
     newspaper: 'Отклики читателей',
     dossier: 'Перехваченные сообщения',
+    scroll: 'Заметки на полях',
+    stream: '💬 Чат после стрима',
+    subtitles: 'Соцсети в эфире',
 };
 
 export function renderFeedHtml(feed, theme = 'magazine') {
@@ -374,7 +393,7 @@ export function renderFeedHtml(feed, theme = 'magazine') {
                 <span>${title} · ${messages.length}</span>
                 <button class="jnk-icon-btn jnk-feed-delete" type="button" title="Удалить ленту"><i class="fa-solid fa-trash-can"></i></button>
             </div>
-            <div class="jnk-feed-list">${messages.map(messageHtml).join('')}</div>
+            <div class="jnk-feed-list">${messages.map(theme === 'stream' ? streamLineHtml : messageHtml).join('')}</div>
         </section>`;
 }
 

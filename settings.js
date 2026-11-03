@@ -4,7 +4,7 @@
 
 import { ctx, getSettings, saveSettings, escapeHtml } from './store.js';
 import { LANGUAGES } from './formats.js';
-import { THEMES, PAPERS, getTheme, normalizePaper, stageClass, DEMO_ITEM, DEMO_PERSONA } from './themes.js';
+import { THEMES, PAPERS, getTheme, normalizePaper, stageClass, paperThemeLabels, DEMO_ITEM, DEMO_PERSONA } from './themes.js';
 import { renderInterviewHtml } from './render.js';
 
 function categoryHtml(icon, title, body, open = false) {
@@ -30,7 +30,7 @@ export function settingsPaneHtml() {
         <div class="jnk-seg" id="jnk_paper">
             ${PAPERS.map((p) => `<button type="button" class="jnk-seg-btn ${p.id === paper ? 'active' : ''}" data-paper="${p.id}">${p.label}</button>`).join('')}
         </div>
-        <div class="jnk-set-hint">Для Газеты, Сценария и Досье. Переключается и прямо в интервью.</div>`;
+        <div class="jnk-set-hint">Для тем: ${escapeHtml(paperThemeLabels().join(', '))}. Переключается и прямо в интервью.</div>`;
 
     const custom = s.promptSource === 'custom';
 

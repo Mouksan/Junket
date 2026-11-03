@@ -1,13 +1,22 @@
 // Junket — темы оформления интервью.
 // Тема меняет только вид: текст, копирование и промпты от неё не зависят.
 
+// own — своя палитра вместо цветов таверны; paper — у палитры есть день и ночь (☀/🌙)
 export const THEMES = [
-    { id: 'magazine', label: 'Журнал', paper: false },
-    { id: 'messenger', label: 'Мессенджер', paper: false },
-    { id: 'newspaper', label: 'Газета', paper: true },
-    { id: 'script', label: 'Сценарий', paper: true },
-    { id: 'dossier', label: 'Досье', paper: true },
+    { id: 'magazine', label: 'Журнал', own: false, paper: false },
+    { id: 'messenger', label: 'Мессенджер', own: false, paper: false },
+    { id: 'newspaper', label: 'Газета', own: true, paper: true },
+    { id: 'script', label: 'Сценарий', own: true, paper: true },
+    { id: 'dossier', label: 'Досье', own: true, paper: true },
+    { id: 'scroll', label: 'Свиток', own: true, paper: true },
+    { id: 'stream', label: 'Стрим-чат', own: true, paper: true },
+    { id: 'subtitles', label: 'Субтитры', own: true, paper: false },
 ];
+
+/** Темы, где работает ☀/🌙 — для подсказки в настройках. */
+export function paperThemeLabels() {
+    return THEMES.filter((t) => t.paper).map((t) => t.label);
+}
 
 export const PAPERS = [
     { id: 'day', label: '☀ День' },
@@ -25,7 +34,9 @@ export function normalizePaper(id) {
 /** Классы сцены, внутри которой рисуются интервью и лента. */
 export function stageClass(themeId, paperId) {
     const theme = getTheme(themeId);
-    return `jnk-stage jnk-th-${theme.id}${theme.paper ? ` jnk-paper jnk-paper-${normalizePaper(paperId)}` : ''}`;
+    const own = theme.own ? ' jnk-paper' : '';
+    const paper = theme.paper ? ` jnk-paper-${normalizePaper(paperId)}` : '';
+    return `jnk-stage jnk-th-${theme.id}${own}${paper}`;
 }
 
 /** Кусочек для превью тем в настройках. Рисуется тем же кодом, что и настоящее интервью. */
