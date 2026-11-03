@@ -349,8 +349,9 @@ function chipsHtml(items, selectedId, attr) {
 
 function shootSectionHtml() {
     const shoot = getShoot();
+    // «Актёры между собой» в режиме «Персонажи» не нужны: у героев своя динамика из ролки
     const vibeRows = VIBES.map((group) => `
-        <div class="jnk-vibe-row">
+        <div class="jnk-vibe-row" ${group.id === 'chemistry' ? `data-actors-only ${shoot.studio === 'characters' ? 'hidden' : ''}` : ''}>
             <span class="jnk-vibe-name">${escapeHtml(group.label)}</span>
             <div class="jnk-chips" data-vibe-group="${group.id}">
                 ${chipsHtml(group.options, shoot.vibes[group.id], 'data-vibe')}
@@ -427,6 +428,7 @@ function bindShootSection(pane) {
         if (btn.dataset.studio) {
             shoot.studio = btn.dataset.studio;
             section.querySelectorAll('[data-studio]').forEach((b) => b.classList.toggle('active', b === btn));
+            section.querySelectorAll('[data-actors-only]').forEach((row) => { row.hidden = shoot.studio === 'characters'; });
         } else if (btn.dataset.guest) {
             const id = btn.dataset.guest;
             const on = !shoot.guests.includes(id);

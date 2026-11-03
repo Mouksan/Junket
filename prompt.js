@@ -19,6 +19,8 @@ function formatBlock(shoot) {
 function vibesBlock(shoot) {
     const lines = [];
     for (const group of VIBES) {
+        // В режиме «Персонажи» отношения берутся из самой ролки, а не из вайба
+        if (group.id === 'chemistry' && shoot.studio === 'characters') continue;
         const option = group.options.find((o) => o.id === shoot.vibes[group.id]);
         if (option) lines.push(`- ${option.prompt}`);
     }

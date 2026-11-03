@@ -91,7 +91,8 @@ function buildHtml() {
                 <div class="jnk-settings" id="jnk_settings_root">
                     <div class="jnk-drawer-hint">Интервью с актёрами по выбранным сценам чата.</div>
                     <button class="menu_button jnk-open-btn" type="button">
-                        <i class="fa-solid fa-clapperboard"></i> Открыть Junket
+                        <i class="fa-solid fa-clapperboard"></i>
+                        <span>Открыть Junket</span>
                     </button>
                     ${categoryHtml('fa-plug', 'Модель для интервью', model)}
                     ${categoryHtml('fa-book', 'Лорбуки', lore)}
