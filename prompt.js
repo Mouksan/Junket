@@ -1,6 +1,5 @@
-// Junket — промпт интервью.
-// Этап 5а: формат, площадка для вопросов фанатов, число вопросов, болтовня, вайбы, пожелания, язык.
-// Кастинг (5б), банк вопросов (5в) и вопросы из зала (5г) подключатся позже.
+// Junket — промпты: само интервью и раунд «Вопросы из зала».
+// Формат, вайбы, мат, ритм, каст, имена и язык — общие для обоих.
 
 import { getMainRoles, normalizeCast } from './cast.js';
 import { getList, listQuestions, pickQuestions } from './bank.js';
@@ -189,6 +188,82 @@ ${sceneText}
 
 # TASK
 Write the interview now, following the instruction exactly.`;
+
+    return { instruction, contextText };
+}
+
+// ---------- Вопросы из зала ----------
+
+/**
+ * Раунд вопросов из зала: продолжение готового интервью.
+ * interviewText — интервью вместе с прошлыми раундами; count — сколько зрительских вопросов;
+ * ownQuestions — вопросы автора (могут быть пустыми); nick — ник автора в зале.
+ */
+export function buildAudiencePrompt({ sourcesText, sceneText, from, to, shoot: rawShoot, cast: rawCast, interviewText, count, ownQuestions, nick }) {
+    const shoot = normalizeShoot(rawShoot);
+    const cast = normalizeCast(rawCast);
+    const language = getLanguage(getSettings().language).prompt;
+    const people = studioPeople(shoot, cast);
+    const actors = shoot.studio !== 'characters';
+    const example = people[0]?.name || 'Name';
+    const own = (ownQuestions || []).filter((q) => String(q).trim());
+    const total = count + own.length;
+    const speakerTag = actors
+        ? '[A: Actor Name (Character Name)] an answer — Character Name exactly as listed in WHO IS INTERVIEWED'
+        : `[A: Speaker Name (Character Name)] an answer — Speaker Name is the character's own name in ${language}, Character Name exactly as listed in WHO IS INTERVIEWED`;
+
+    const format = getFormat(shoot.format);
+    const formatLines = [format.prompt];
+    if (format.id === 'fans') formatLines.push(getVenue(shoot.venue).prompt);
+    formatLines.push(getBanter(shoot.banter).prompt);
+
+    const ownBlock = own.length
+        ? `
+- The other ${own.length} question${own.length === 1 ? '' : 's'} come${own.length === 1 ? 's' : ''} from the audience member "${nick}". Ask them as written: you may adjust the wording slightly to fit the format, never the meaning. Sign each of them exactly [F: ${nick}]. Mix them in among the invented questions, not all at the start or at the end.
+${own.map((q, i) => `  ${i + 1}. ${q}`).join('\n')}`
+        : '';
+
+    const instruction = `You are continuing a fictional ${actors ? 'behind-the-scenes ' : ''}interview with a segment of questions from the audience.
+
+${actors ? actorsPart(people, language) : charactersPart(people)}
+
+FORMAT OF THE INTERVIEW
+${formatLines.join('\n')}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${wishesBlock(shoot)}
+
+AUDIENCE SEGMENT
+- INTERVIEW SO FAR contains the interview already recorded. Continue it: the host briefly opens the floor to the audience in one short [Q] line, even if the interview already said goodbye.
+- Exactly ${total} audience question${total === 1 ? '' : 's'}.
+- ${count} of them come from audience members you invent: each has a fandom-style nickname, like a real social media handle (Latin or Cyrillic letters, underscores). Their questions are bold, shippy, funny or touching, about concrete moments of SCENES and of the interview so far.${ownBlock}
+- The same people answer as in INTERVIEW SO FAR: the same names, personalities, relationships and running jokes. Do not repeat jokes or stories that were already told.
+- Several people may answer one question; follow-ups and short reactions are welcome. The host may close with one short line at the end.
+
+${rhythmBlock(shoot)}
+
+OUTPUT MARKUP (strict)
+Every turn starts on a new line with a tag:
+[Q] the host's remark
+[F: Nickname] an audience question — the nickname exactly as it should be shown
+${speakerTag}
+A turn may span several paragraphs until the next tag.
+Stage directions go in *asterisks* inside a turn. Emoji are allowed sparingly inside stage directions.
+No [TITLE]. Start immediately with the host's [Q] line. No preamble, no closing notes.
+
+NAMES
+- In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: ${actors ? 'Actor Name' : 'Speaker Name'} (${example})]. Never translate, transliterate or decline it. Use the same speaker names as in INTERVIEW SO FAR.
+- Everywhere else, use every name (characters, NPCs, places) in the form the story itself uses in SCENES, in ${language} and declined according to ${language} grammar.
+
+LANGUAGE
+Write everything in ${language}, except the character names inside the [A: …] tag parentheses and the audience nicknames.
+No words or phrases in other languages: no English (or any other) interjections, catchphrases or quotes mixed in.`;
+
+    const contextText = `${sourcesText ? `${sourcesText}\n\n` : ''}# SCENES (messages #${from}–#${to})
+${sceneText}
+
+# INTERVIEW SO FAR
+${interviewText}
+
+# TASK
+Write the audience segment now, following the instruction exactly.`;
 
     return { instruction, contextText };
 }

@@ -4,6 +4,7 @@
 //   [TITLE] заголовок
 //   [Q] вопрос интервьюера
 //   [A: Актёр (Veyne)] ответ актёра — в скобках имя из карточки/персоны
+//   [F: @ник] вопрос из зала (раунды «Вопросов из зала»)
 // Внутри реплик: *ремарка*, **жирное**, абзацы через пустую строку.
 
 import { ctx, escapeHtml, formatDate } from './store.js';
@@ -13,11 +14,11 @@ import { user_avatar } from '../../../personas.js';
 // Цвета для актёров сверх первых двух (перс — цвет цитат темы, персона — цвет выделения)
 const EXTRA_COLORS = ['#7fb3d5', '#c39bd3', '#82c9a5', '#e6b673', '#e59a9a', '#8fc1c4'];
 
-const TAG_RE = /^\s*\[(TITLE|Q|A)(?:\s*:\s*([^\]]*))?\]\s*(.*)$/i;
+const TAG_RE = /^\s*\[(TITLE|Q|A|F)(?:\s*:\s*([^\]]*))?\]\s*(.*)$/i;
 
 /**
  * Разбирает сырой текст.
- * Возвращает { title, turns: [{ kind: 'q' | 'a', actor, character, lines: [] }] }.
+ * Возвращает { title, turns: [{ kind: 'q' | 'a' | 'f', actor, character, body }] }.
  * Если реплик нет совсем — turns пустой (тогда показываем текст как есть).
  */
 export function parseInterview(text) {
@@ -36,6 +37,8 @@ export function parseInterview(text) {
             }
             if (tag === 'Q') {
                 current = { kind: 'q', actor: '', character: '', lines: [rest] };
+            } else if (tag === 'F') {
+                current = { kind: 'f', actor: String(m[2] || '').trim() || 'Из зала', character: '', lines: [rest] };
             } else {
                 const speaker = String(m[2] || '').trim();
                 const sm = speaker.match(/^(.*?)\s*\(([^)]*)\)\s*$/);
@@ -176,10 +179,29 @@ export function renderInterviewHtml(item) {
         return `<article class="jnk-iv">${head}<div class="jnk-iv-plain">${bodyHtml(item.text)}</div></article>`;
     }
 
-    const { map, nextExtra } = buildCastMap();
-    const unknown = new Map();   // актёры, которых не нашли в чате: имя → цвет
+    const cast = { ...buildCastMap(), unknown: new Map() };   // цвета общие для интервью и раундов
+    const rounds = (item.rounds || []).filter((r) => String(r?.text || '').trim());
+    const roundsHtml = rounds.map((round, i) => {
+        const roundTurns = parseInterview(round.text).turns;
+        const body = roundTurns.length
+            ? `<div class="jnk-iv-turns">${turnsHtml(roundTurns, cast, round.ownNick)}</div>`
+            : `<div class="jnk-iv-plain">${bodyHtml(round.text)}</div>`;
+        return `
+            <section class="jnk-round" data-round="${escapeHtml(round.id)}">
+                <div class="jnk-round-head">
+                    <span>🎤 Вопросы из зала${i > 0 ? ` · раунд ${i + 1}` : ''}</span>
+                    <button class="jnk-icon-btn jnk-round-delete" type="button" title="Удалить раунд"><i class="fa-solid fa-trash-can"></i></button>
+                </div>
+                ${body}
+            </section>`;
+    }).join('');
 
-    const turns = parsed.turns.map((turn) => {
+    return `<article class="jnk-iv">${head}<div class="jnk-iv-turns">${turnsHtml(parsed.turns, cast, '')}</div>${roundsHtml}</article>`;
+}
+
+function turnsHtml(turns, cast, ownNick) {
+    const own = String(ownNick || '').trim().toLowerCase();
+    return turns.map((turn) => {
         if (turn.kind === 'q') {
             return `
                 <section class="jnk-iv-q">
@@ -187,13 +209,21 @@ export function renderInterviewHtml(item) {
                     <div class="jnk-iv-text">${bodyHtml(turn.body)}</div>
                 </section>`;
         }
+        if (turn.kind === 'f') {
+            const isOwn = own && turn.actor.trim().toLowerCase() === own;
+            return `
+                <section class="jnk-iv-f ${isOwn ? 'jnk-iv-own' : ''}">
+                    <div class="jnk-iv-q-label">💬 ${escapeHtml(turn.actor)}${isOwn ? ' <span class="jnk-badge">автор</span>' : ''}</div>
+                    <div class="jnk-iv-text">${bodyHtml(turn.body)}</div>
+                </section>`;
+        }
 
-        const known = map.get(turn.character.toLowerCase());
+        const known = cast.map.get(turn.character.toLowerCase());
         let color = known?.color;
         if (!color) {
             const key = (turn.character || turn.actor).toLowerCase();
-            if (!unknown.has(key)) unknown.set(key, nextExtra());
-            color = unknown.get(key);
+            if (!cast.unknown.has(key)) cast.unknown.set(key, cast.nextExtra());
+            color = cast.unknown.get(key);
         }
         const avatar = known?.avatar
             ? `<img class="jnk-iv-avatar" src="${escapeHtml(known.avatar)}" alt="" loading="lazy">`
@@ -209,18 +239,35 @@ export function renderInterviewHtml(item) {
                 <div class="jnk-iv-text">${bodyHtml(turn.body)}</div>
             </section>`;
     }).join('');
-
-    return `<article class="jnk-iv">${head}<div class="jnk-iv-turns">${turns}</div></article>`;
 }
 
 /** Чистый текст для буфера обмена: без тегов, с подписями говорящих. */
 export function interviewPlainText(item) {
     const title = item.title || defaultTitle(item.range);
-    const parsed = parseInterview(item.text);
-    if (!parsed.turns.length) return `${title}\n\n${String(item.text || '').trim()}`;
-    const parts = parsed.turns.map((turn) => {
-        const who = turn.kind === 'q' ? 'Интервьюер' : (turn.character ? `${turn.actor} (${turn.character})` : turn.actor);
-        return `${who}: ${turn.body}`;
+    const sections = [title, plainTurns(item.text)];
+    (item.rounds || []).forEach((round, i) => {
+        if (!String(round?.text || '').trim()) return;
+        sections.push(`— Вопросы из зала${i > 0 ? ` · раунд ${i + 1}` : ''} —`, plainTurns(round.text));
     });
-    return `${title}\n\n${parts.join('\n\n')}`.replace(BLEEP_RE, '█████');
+    return sections.join('\n\n').replace(BLEEP_RE, '█████');
+}
+
+function plainTurns(text) {
+    const parsed = parseInterview(text);
+    if (!parsed.turns.length) return String(text || '').trim();
+    return parsed.turns.map((turn) => {
+        const who = turn.kind === 'q' ? 'Интервьюер'
+            : turn.kind === 'f' ? turn.actor
+                : (turn.character ? `${turn.actor} (${turn.character})` : turn.actor);
+        return `${who}: ${turn.body}`;
+    }).join('\n\n');
+}
+
+/** Интервью вместе с раундами — сырой текст для модели и для «Закрепить каст». */
+export function fullInterviewText(item) {
+    const parts = [String(item.text || '').trim()];
+    for (const round of item.rounds || []) {
+        if (String(round?.text || '').trim()) parts.push(String(round.text).trim());
+    }
+    return parts.join('\n\n');
 }

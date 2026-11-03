@@ -954,6 +954,114 @@
     }
 }
 
+/* Вопросы из зала: раунды в вёрстке */
+
+.jnk-round {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 10px;
+    padding-top: 14px;
+    border-top: 1px dashed var(--SmartThemeBorderColor);
+}
+
+.jnk-round-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    font-size: 0.85em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.75;
+}
+
+.jnk-iv-f {
+    padding: 10px 14px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background: rgba(127, 127, 127, 0.07);
+}
+
+.jnk-iv-f .jnk-iv-label,
+.jnk-iv-f .jnk-iv-q-label {
+    text-transform: none;
+    letter-spacing: 0;
+    font-size: 0.85em;
+    opacity: 0.75;
+}
+
+.jnk-iv-f .jnk-iv-text {
+    font-weight: 500;
+}
+
+.jnk-iv-own {
+    border-color: var(--SmartThemeQuoteColor);
+    box-shadow: 0 0 0 1px var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 9%, transparent);
+}
+
+.jnk-iv-own .jnk-iv-q-label {
+    opacity: 1;
+    color: var(--SmartThemeQuoteColor);
+}
+
+/* Вопросы из зала: панель под интервью */
+
+.jnk-audience {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 22px;
+    padding-top: 14px;
+    border-top: 1px solid var(--SmartThemeBorderColor);
+}
+
+.jnk-audience-toggle {
+    align-self: flex-start;
+}
+
+.jnk-audience-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.jnk-audience-panel[hidden] {
+    display: none;
+}
+
+.jnk-audience-panel > .jnk-cast-field {
+    flex: 0 0 auto;
+}
+
+.jnk-audience-row .jnk-cast-field:not(.jnk-audience-count-field) {
+    flex: 1 1 200px;
+}
+
+.jnk-audience-own {
+    width: 100%;
+    margin: 0;
+    resize: vertical;
+}
+
+.jnk-audience-row {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+}
+
+.jnk-audience-count-field {
+    flex: 0 0 160px;
+}
+
+.jnk-audience-actions {
+    margin-top: 4px;
+    padding-top: 0;
+    border-top: none;
+}
+
 /* Ящик расширений — по образцу Koma */
 
 .jnk-settings {

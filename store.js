@@ -33,6 +33,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
 
     // Лорбуки (как в Realmweaver)
     loreTokenLimit: 30000,
+
+    // Вопросы из зала
+    audienceCount: 2,            // сколько зрительских вопросов в раунде
+    audienceNick: 'Из зала',     // ник автора в зале
 });
 
 export function ctx() {

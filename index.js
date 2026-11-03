@@ -6,19 +6,20 @@
 // Этап 5а: «Как снимаем» — формат, вопросы, болтовня, вайбы, пожелания
 // Этап 5б: кастинг — актёры и НПС в чате, «Кто в студии», «Закрепить каст»
 // Этап 5в: банк вопросов — списки, «именно эти» / «как примеры», редактор
+// Этап 5г: вопросы из зала — раунды под интервью
 
 import {
-    ctx, getSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
+    ctx, getSettings, saveSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
     currentChatId, getChatStore, saveChatStore, saveChatStoreDebounced, TOAST_TITLE,
 } from './store.js';
 import {
     ACTIVE_KIND_LABELS, getLorebookList, resolveLoreSelection, getSourceFlags, storeSources,
     countLorebookTokens, resetLoreTokenCache, collectSources, buildSceneText,
 } from './sources.js';
-import { buildInterviewPrompt } from './prompt.js';
+import { buildInterviewPrompt, buildAudiencePrompt } from './prompt.js';
 import { requestModel } from './connection.js';
 import { addSettingsDrawer } from './settings.js';
-import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle } from './render.js';
+import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle, fullInterviewText } from './render.js';
 import {
     FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, BANK_MODES, QUESTIONS_MIN, QUESTIONS_MAX,
     getFormat, normalizeShoot, formatLabel,
@@ -714,6 +715,8 @@ async function onGoClick() {
             range: { from: range.from, to: range.to },
             format: shoot.format,
             studio: shoot.studio,
+            shoot: { ...shoot },    // весь выбор «Как снимаем» — чтобы вопросы из зала звучали тем же голосом
+            rounds: [],
             venue: shoot.format === 'fans' ? shoot.venue : null,
             text,
         };
@@ -1048,7 +1051,8 @@ function renderArchiveViewer(pane, item) {
                 <button class="jnk-btn jnk-btn-danger jnk-remove" type="button"><i class="fa-solid fa-trash-can"></i> Удалить</button>
             </div>
         </div>
-        ${renderInterviewHtml(item)}`;
+        ${renderInterviewHtml(item)}
+        ${String(item.text || '').trim() ? audiencePanelHtml(item) : ''}`;
 
     pane.querySelector('.jnk-back').addEventListener('click', () => {
         archiveOpenId = null;
@@ -1061,11 +1065,165 @@ function renderArchiveViewer(pane, item) {
     });
     pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
     pane.querySelector('.jnk-pin')?.addEventListener('click', () => pinCast(item));
+    pane.querySelectorAll('.jnk-round-delete').forEach((btn) => {
+        btn.addEventListener('click', () => deleteRound(item.id, btn.closest('[data-round]').dataset.round));
+    });
+    bindAudiencePanel(pane, item);
+}
+
+// ---------- Вопросы из зала ----------
+
+let audienceGen = null;            // { controller, chatId, itemId } пока идёт запрос
+let audienceOpenFor = null;        // у какого интервью раскрыта панель
+const audienceDrafts = new Map();  // id интервью → черновик своих вопросов
+
+function audiencePanelHtml(item) {
+    const s = getSettings();
+    const open = audienceOpenFor === item.id;
+    const running = audienceGen && audienceGen.itemId === item.id;
+    return `
+        <div class="jnk-audience">
+            <button class="jnk-btn jnk-audience-toggle" type="button">🎤 Вопросы из зала</button>
+            <div class="jnk-audience-panel" ${open || running ? '' : 'hidden'}>
+                <label class="jnk-cast-field">
+                    <span>Свои вопросы (необязательно)</span>
+                    <textarea class="text_pole jnk-audience-own" rows="3" placeholder="По одному на строку">${escapeHtml(audienceDrafts.get(item.id) || '')}</textarea>
+                </label>
+                <div class="jnk-hint">Пусто — спрашивают только зрители.</div>
+                <div class="jnk-audience-row">
+                    <label class="jnk-cast-field jnk-audience-count-field">
+                        <span>Зрительских вопросов</span>
+                        <input class="text_pole jnk-audience-count" type="number" min="1" max="5" step="1" value="${escapeHtml(s.audienceCount)}">
+                    </label>
+                    <label class="jnk-cast-field">
+                        <span>Твой ник в зале</span>
+                        <input class="text_pole jnk-audience-nick" type="text" value="${escapeHtml(s.audienceNick)}">
+                    </label>
+                </div>
+                <div class="jnk-actions jnk-audience-actions">
+                    <button class="jnk-go jnk-audience-go ${running ? 'jnk-stop' : ''}" type="button">${running ? '<i class="fa-solid fa-stop"></i> Стоп' : 'Задать'}</button>
+                    <span class="jnk-status">${running ? '<i class="fa-solid fa-spinner fa-spin"></i> Зал спрашивает…' : ''}</span>
+                </div>
+            </div>
+        </div>`;
+}
+
+function bindAudiencePanel(pane, item) {
+    const box = pane.querySelector('.jnk-audience');
+    if (!box) return;
+    box.querySelector('.jnk-audience-toggle').addEventListener('click', () => {
+        const panel = box.querySelector('.jnk-audience-panel');
+        panel.hidden = !panel.hidden;
+        audienceOpenFor = panel.hidden ? null : item.id;
+    });
+    box.querySelector('.jnk-audience-own').addEventListener('input', (e) => {
+        audienceDrafts.set(item.id, e.target.value);
+    });
+    const count = box.querySelector('.jnk-audience-count');
+    count.addEventListener('change', () => {
+        let n = Math.round(Number(count.value));
+        if (!Number.isFinite(n)) n = 2;
+        n = Math.min(5, Math.max(1, n));
+        count.value = n;
+        getSettings().audienceCount = n;
+        saveSettings();
+    });
+    const nick = box.querySelector('.jnk-audience-nick');
+    nick.addEventListener('input', () => {
+        getSettings().audienceNick = nick.value;
+        saveSettings();
+    });
+    box.querySelector('.jnk-audience-go').addEventListener('click', () => onAudienceClick(item.id));
+}
+
+function refreshViewer(itemId) {
+    if (isOpen() && activeTab === 'archive' && archiveOpenId === itemId) renderArchive();
+}
+
+async function onAudienceClick(itemId) {
+    if (audienceGen) {
+        audienceGen.controller.junketQuiet = true;
+        audienceGen.controller.abort();
+        const stopped = audienceGen.itemId;
+        audienceGen = null;
+        toastr.info('Генерация остановлена', TOAST_TITLE);
+        refreshViewer(stopped);
+        return;
+    }
+    const store = getChatStore();
+    const item = store?.interviews.find((i) => i.id === itemId);
+    if (!item?.range) {
+        toastr.warning('У этого интервью нет диапазона сообщений — вопросы из зала задать не получится', TOAST_TITLE);
+        return;
+    }
+
+    const s = getSettings();
+    const count = Math.min(5, Math.max(1, Math.round(Number(s.audienceCount)) || 2));
+    const nick = String(s.audienceNick || '').trim() || 'Из зала';
+    const own = String(audienceDrafts.get(itemId) || '').split('\n').map((q) => q.trim()).filter(Boolean);
+    const chatId = currentChatId();
+    const controller = new AbortController();
+    audienceGen = { controller, chatId, itemId };
+    audienceOpenFor = itemId;
+    refreshViewer(itemId);
+
+    try {
+        const last = lastIndex();
+        if (item.range.from > last) throw new Error('Сообщений из этого интервью в чате больше нет.');
+        const to = Math.min(item.range.to, last);
+        const sources = await collectSources(store.sources);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        const sceneText = buildSceneText(item.range.from, to);
+
+        const { instruction, contextText } = buildAudiencePrompt({
+            sourcesText: sources.text,
+            sceneText,
+            from: item.range.from,
+            to,
+            shoot: item.shoot || getShoot(),
+            cast: getCast(),
+            interviewText: fullInterviewText(item),
+            count,
+            ownQuestions: own,
+            nick,
+        });
+        const text = await requestModel({ instruction, contextText }, controller.signal);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (!text.trim()) throw new Error('Модель вернула пустой ответ — попробуй ещё раз или увеличь лимит токенов ответа.');
+
+        const fresh = getChatStore()?.interviews.find((i) => i.id === itemId);
+        if (!fresh || currentChatId() !== chatId) return;
+        if (!Array.isArray(fresh.rounds)) fresh.rounds = [];
+        fresh.rounds.push({ id: makeId(), createdAt: Date.now(), text, ownNick: own.length ? nick : '' });
+        await saveChatStore();
+        audienceDrafts.delete(itemId);
+        toastr.success('Вопросы из зала добавлены 🎤', TOAST_TITLE);
+    } catch (error) {
+        if (controller.signal.aborted || error?.name === 'AbortError') {
+            if (!controller.junketQuiet) toastr.info('Генерация остановлена', TOAST_TITLE);
+        } else {
+            console.error('[Junket]', error);
+            toastr.error(String(error?.message || error), TOAST_TITLE);
+        }
+    } finally {
+        if (audienceGen?.controller === controller) audienceGen = null;
+        refreshViewer(itemId);
+    }
+}
+
+async function deleteRound(itemId, roundId) {
+    const ok = await confirmPopup('Удалить этот раунд вопросов из зала? Отменить не получится.');
+    if (!ok) return;
+    const item = getChatStore()?.interviews.find((i) => i.id === itemId);
+    if (!item || !Array.isArray(item.rounds)) return;
+    item.rounds = item.rounds.filter((r) => r.id !== roundId);
+    await saveChatStore();
+    refreshViewer(itemId);
 }
 
 async function pinCast(item) {
     const cast = getCast();
-    const found = castFromTurns(parseInterview(item.text).turns, cast);
+    const found = castFromTurns(parseInterview(fullInterviewText(item)).turns, cast);
     const pairs = [...found.mains, ...found.npcs].map((p) => `${p.name} — ${p.actor}`);
     if (!pairs.length) {
         toastr.info('В этом интервью не нашлось актёров, которых можно закрепить', TOAST_TITLE);
@@ -1137,6 +1295,13 @@ function onChatChanged() {
         generation = null;
         toastr.info('Генерация остановлена: сменился чат', TOAST_TITLE);
     }
+    if (audienceGen) {
+        audienceGen.controller.junketQuiet = true;
+        audienceGen.controller.abort();
+        audienceGen = null;
+        toastr.info('Вопросы из зала остановлены: сменился чат', TOAST_TITLE);
+    }
+    audienceOpenFor = null;
     resetLoreTokenCache();
     archiveOpenId = null;
     if (bankEditorEl) bankEditorEl.hidden = true;
