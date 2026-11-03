@@ -358,13 +358,20 @@ export function feedMessages(feed) {
     return (Array.isArray(feed) ? feed : []).flatMap((batch) => Array.isArray(batch?.messages) ? batch.messages : []);
 }
 
-export function renderFeedHtml(feed) {
+// Заголовок ленты под тему: в Газете — отклики, в Досье — перехват
+const FEED_TITLES = {
+    newspaper: 'Отклики читателей',
+    dossier: 'Перехваченные сообщения',
+};
+
+export function renderFeedHtml(feed, theme = 'magazine') {
     const messages = feedMessages(feed);
     if (!messages.length) return '';
+    const title = FEED_TITLES[theme] || '💬 Комментарии';
     return `
         <section class="jnk-feed">
             <div class="jnk-round-head">
-                <span>💬 Комментарии · ${messages.length}</span>
+                <span>${title} · ${messages.length}</span>
                 <button class="jnk-icon-btn jnk-feed-delete" type="button" title="Удалить ленту"><i class="fa-solid fa-trash-can"></i></button>
             </div>
             <div class="jnk-feed-list">${messages.map(messageHtml).join('')}</div>

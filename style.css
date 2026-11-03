@@ -1,4 +1,6 @@
-/* Junket — стили: окно, вкладки, выбор сообщений, источники, генерация, архив, настройки */
+/* Junket — стили: окно, вкладки, выбор сообщений, источники, генерация, архив, настройки, темы */
+
+@import url('./fonts/fonts.css');
 
 .jnk-overlay {
     position: fixed;
@@ -860,6 +862,7 @@
 
 .jnk-viewer-actions {
     display: flex;
+    flex-wrap: wrap;
     gap: 6px;
 }
 
@@ -1404,6 +1407,731 @@
     margin-left: 4px;
     padding-left: 10px;
     border-left: 2px solid color-mix(in srgb, var(--SmartThemeQuoteColor) 35%, transparent);
+}
+
+/* Настройки в окне */
+
+.jnk-gear.jnk-active {
+    opacity: 1;
+    color: var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, transparent);
+}
+
+.jnk-settings-on .jnk-tabs {
+    display: none;
+}
+
+.jnk-settings-on .jnk-header {
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+[data-pane="settings"] > .jnk-viewer-bar {
+    justify-content: flex-start;
+    gap: 12px;
+}
+
+.jnk-settings-heading {
+    font-weight: 700;
+    opacity: 0.85;
+}
+
+.jnk-settings-window {
+    max-width: 900px;
+    padding-top: 0;
+}
+
+.jnk-settings-window > .jnk-cat:first-child {
+    border-top: none;
+}
+
+/* Оформление: карточки тем с превью */
+
+.jnk-theme-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 10px;
+    margin-top: 4px;
+}
+
+.jnk-theme-card {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 8px;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 10px;
+    background: rgba(127, 127, 127, 0.05);
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+}
+
+.jnk-theme-card:hover,
+.jnk-theme-card:focus-visible {
+    border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 60%, transparent);
+    outline: none;
+}
+
+.jnk-theme-card.jnk-theme-on {
+    border-color: var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 14%, transparent);
+    box-shadow: inset 0 0 0 1px var(--SmartThemeQuoteColor);
+}
+
+.jnk-theme-name {
+    font-size: 0.85em;
+    font-weight: 700;
+}
+
+.jnk-theme-on .jnk-theme-name::after {
+    content: ' ✓';
+    color: var(--SmartThemeQuoteColor);
+}
+
+.jnk-theme-preview {
+    height: 210px;
+    overflow: hidden;
+    font-size: 10px;
+    border-radius: 6px;
+    pointer-events: none;
+}
+
+.jnk-theme-preview .jnk-stage:not(.jnk-paper) {
+    padding: 4px 2px;
+}
+
+.jnk-theme-preview .jnk-iv {
+    gap: 10px;
+}
+
+.jnk-theme-preview .jnk-iv-head {
+    padding-bottom: 6px;
+}
+
+.jnk-theme-preview .jnk-sc-line {
+    margin: 0 4%;
+}
+
+.jnk-theme-preview .jnk-paper {
+    min-height: 100%;
+    padding: 10px 12px;
+    box-shadow: none;
+}
+
+/* ========== Темы интервью ========== */
+
+.jnk-stage {
+    container-type: inline-size;
+}
+
+/* Бумажные темы: своя бумага, день и ночь */
+
+.jnk-paper {
+    color: var(--jnk-ink);
+    background: var(--jnk-paper-bg);
+    padding: 22px 26px;
+    border-radius: 4px;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25), 0 8px 24px rgba(0, 0, 0, 0.22);
+}
+
+.jnk-paper .jnk-iv-text p,
+.jnk-paper .jnk-iv-plain p {
+    line-height: 1.55;
+}
+
+.jnk-paper .jnk-dir {
+    opacity: 1;
+    color: var(--jnk-muted);
+}
+
+.jnk-paper .jnk-iv-meta {
+    opacity: 1;
+    color: var(--jnk-muted);
+}
+
+.jnk-paper .jnk-empty {
+    color: var(--jnk-muted);
+}
+
+.jnk-paper-night .jnk-redact {
+    background: #000;
+    box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.28);
+}
+
+.jnk-paper .jnk-round-head {
+    opacity: 1;
+}
+
+/* Лента на бумаге: цвета бумаги, ники чернилами */
+
+.jnk-paper .jnk-feed {
+    border-top-color: color-mix(in srgb, var(--jnk-rule) 50%, transparent);
+}
+
+.jnk-paper .jnk-feed-list {
+    background: transparent;
+    border-color: color-mix(in srgb, var(--jnk-rule) 35%, transparent);
+}
+
+.jnk-paper .jnk-cm {
+    border-bottom-color: color-mix(in srgb, var(--jnk-rule) 18%, transparent);
+}
+
+.jnk-paper .jnk-cm-nick {
+    background-image: none;
+    color: var(--jnk-ink);
+}
+
+.jnk-paper .jnk-cm-text em {
+    color: inherit;
+}
+
+.jnk-paper .jnk-cm-text code {
+    background: color-mix(in srgb, var(--jnk-ink) 10%, transparent);
+}
+
+.jnk-paper .jnk-cm-reply-name {
+    color: var(--jnk-muted) !important;   /* цвет ника приходит инлайном — на бумаге чернила */
+}
+
+.jnk-paper .jnk-cm-reply-line {
+    border-color: color-mix(in srgb, var(--jnk-ink) 35%, transparent);
+}
+
+.jnk-paper .jnk-cm-reaction {
+    border-color: color-mix(in srgb, var(--jnk-rule) 35%, transparent);
+    background: color-mix(in srgb, var(--jnk-ink) 6%, transparent);
+}
+
+@media (hover: hover) {
+    .jnk-paper .jnk-cm:hover {
+        background: color-mix(in srgb, var(--jnk-ink) 4%, transparent);
+    }
+}
+
+/* --- Мессенджер --- */
+
+.jnk-th-messenger .jnk-iv-head {
+    text-align: center;
+}
+
+.jnk-th-messenger .jnk-iv-turns {
+    gap: 6px;
+}
+
+.jnk-msg-sys {
+    align-self: center;
+    max-width: 86%;
+    margin: 10px 0 6px;
+    padding: 8px 14px;
+    text-align: center;
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 14px;
+    background: rgba(127, 127, 127, 0.12);
+}
+
+.jnk-msg-sys-label {
+    margin-bottom: 2px;
+    font-size: 0.74em;
+    font-weight: 700;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+    opacity: 0.6;
+}
+
+.jnk-msg-sys .jnk-iv-text {
+    font-weight: 500;
+}
+
+.jnk-msg-fan .jnk-msg-sys-label {
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.jnk-msg-fan.jnk-own {
+    border-color: var(--SmartThemeQuoteColor);
+    box-shadow: 0 0 0 1px var(--SmartThemeQuoteColor);
+    background: color-mix(in srgb, var(--SmartThemeQuoteColor) 10%, transparent);
+}
+
+.jnk-msg-fan.jnk-own .jnk-msg-sys-label {
+    opacity: 1;
+    color: var(--SmartThemeQuoteColor);
+}
+
+.jnk-msg-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    max-width: 82%;
+}
+
+.jnk-msg-right {
+    align-self: flex-end;
+    flex-direction: row-reverse;
+}
+
+.jnk-msg-cont {
+    margin-top: -2px;
+}
+
+.jnk-msg-ava {
+    flex-shrink: 0;
+    width: 32px;
+}
+
+.jnk-msg-ava .jnk-iv-avatar {
+    width: 32px;
+    height: 32px;
+}
+
+.jnk-msg-bubble {
+    min-width: 0;
+    padding: 7px 12px;
+    border: 1px solid color-mix(in srgb, var(--jnk-speaker) 30%, transparent);
+    border-radius: 4px 16px 16px 16px;
+    background: color-mix(in srgb, var(--SmartThemeBodyColor) 7%, transparent);
+}
+
+.jnk-msg-right .jnk-msg-bubble {
+    border-color: color-mix(in srgb, var(--jnk-speaker) 45%, transparent);
+    border-radius: 16px 4px 16px 16px;
+    background: color-mix(in srgb, var(--jnk-speaker) 18%, transparent);
+}
+
+.jnk-msg-cont .jnk-msg-bubble {
+    border-radius: 16px;
+}
+
+.jnk-msg-name {
+    margin-bottom: 2px;
+    color: var(--jnk-speaker);
+    font-size: 0.8em;
+    font-weight: 800;
+}
+
+.jnk-msg-right .jnk-msg-name {
+    text-align: right;
+}
+
+.jnk-msg-role {
+    color: var(--SmartThemeBodyColor);
+    font-weight: 400;
+    opacity: 0.55;
+}
+
+.jnk-th-messenger .jnk-iv-text p {
+    margin-bottom: 0.4em;
+    line-height: 1.5;
+}
+
+.jnk-th-messenger .jnk-round {
+    gap: 6px;
+    border-top: none;
+}
+
+.jnk-th-messenger .jnk-round-head {
+    justify-content: center;
+    text-transform: none;
+    letter-spacing: 0;
+}
+
+.jnk-th-messenger .jnk-round-head > span {
+    padding: 3px 12px;
+    border-radius: 999px;
+    background: rgba(127, 127, 127, 0.15);
+}
+
+/* --- Газета --- */
+
+.jnk-th-newspaper.jnk-paper-day {
+    --jnk-paper-bg: #efe6d2;
+    --jnk-ink: #2b241a;
+    --jnk-muted: #6b5a3e;
+    --jnk-rule: #2b241a;
+}
+
+.jnk-th-newspaper.jnk-paper-night {
+    --jnk-paper-bg: #2a261f;
+    --jnk-ink: #e6dcc6;
+    --jnk-muted: #ab9d80;
+    --jnk-rule: #8a7c62;
+}
+
+.jnk-th-newspaper {
+    font-family: 'JNK Old Standard', Georgia, 'Times New Roman', serif;
+}
+
+.jnk-th-newspaper .jnk-iv {
+    gap: 12px;
+}
+
+.jnk-th-newspaper .jnk-np-head {
+    padding: 0;
+    text-align: center;
+    border: none;
+}
+
+.jnk-np-mast {
+    display: flex;
+    justify-content: space-between;
+    gap: 10px;
+    padding-bottom: 4px;
+    color: var(--jnk-muted);
+    font-size: 0.75em;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    border-bottom: 3px double var(--jnk-rule);
+}
+
+.jnk-th-newspaper .jnk-iv-title {
+    margin: 10px 0 8px;
+    font-family: 'JNK Playfair', Georgia, serif;
+    font-size: 2em;
+    font-weight: 700;
+    line-height: 1.15;
+}
+
+.jnk-th-newspaper .jnk-iv-meta {
+    margin: 0;
+    padding: 4px 0;
+    font-size: 0.85em;
+    font-style: italic;
+    border-top: 1px solid var(--jnk-rule);
+    border-bottom: 1px solid var(--jnk-rule);
+}
+
+.jnk-th-newspaper .jnk-iv-turns {
+    display: block;
+    hyphens: auto;
+}
+
+@container (min-width: 640px) {
+    .jnk-th-newspaper .jnk-iv-turns {
+        text-align: justify;
+        column-count: 2;
+        column-gap: 26px;
+        column-rule: 1px solid color-mix(in srgb, var(--jnk-rule) 40%, transparent);
+    }
+}
+
+.jnk-th-newspaper .jnk-iv-text p {
+    margin: 0 0 0.5em;
+}
+
+.jnk-np-q {
+    margin-top: 0.3em;
+    font-weight: 700;
+    break-inside: avoid;
+}
+
+.jnk-th-newspaper .jnk-iv > .jnk-iv-turns > .jnk-np-q:first-child p:first-child::first-letter {
+    float: left;
+    padding: 4px 6px 0 0;
+    font-family: 'JNK Playfair', Georgia, serif;
+    font-size: 3.2em;
+    line-height: 0.85;
+}
+
+.jnk-np-name {
+    font-size: 0.82em;
+    font-weight: 700;
+    letter-spacing: 0.6px;
+    text-transform: uppercase;
+}
+
+.jnk-np-role {
+    font-size: 1.1em;
+    font-style: italic;
+    font-weight: 400;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.jnk-th-newspaper .jnk-dir::before,
+.jnk-th-script .jnk-dir::before {
+    content: '(';
+}
+
+.jnk-th-newspaper .jnk-dir::after,
+.jnk-th-script .jnk-dir::after {
+    content: ')';
+}
+
+.jnk-np-letter {
+    font-style: italic;
+    text-align: left;
+}
+
+.jnk-np-letter .jnk-np-name {
+    font-style: normal;
+}
+
+.jnk-np-letter.jnk-own {
+    margin: 0.3em 0 0.6em;
+    padding: 6px 9px;
+    border: 1px solid var(--jnk-rule);
+    break-inside: avoid;
+}
+
+.jnk-th-newspaper .jnk-round {
+    gap: 8px;
+    margin-top: 6px;
+    padding-top: 8px;
+    border-top: 3px double var(--jnk-rule);
+}
+
+.jnk-th-newspaper .jnk-round-head,
+.jnk-th-newspaper .jnk-feed .jnk-round-head {
+    position: relative;
+    justify-content: center;
+    font-family: 'JNK Playfair', Georgia, serif;
+    font-size: 1.15em;
+    letter-spacing: 0;
+    text-transform: none;
+}
+
+.jnk-th-newspaper .jnk-round-head .jnk-icon-btn {
+    position: absolute;
+    right: 0;
+}
+
+.jnk-th-newspaper .jnk-feed {
+    border-top: 3px double var(--jnk-rule);
+}
+
+/* --- Сценарий --- */
+
+.jnk-th-script.jnk-paper-day {
+    --jnk-paper-bg: #fbfaf6;
+    --jnk-ink: #1e1e1e;
+    --jnk-muted: #5f5e5a;
+    --jnk-rule: #1e1e1e;
+}
+
+.jnk-th-script.jnk-paper-night {
+    --jnk-paper-bg: #1f2023;
+    --jnk-ink: #e4e2dc;
+    --jnk-muted: #9a988f;
+    --jnk-rule: #6b6a66;
+}
+
+.jnk-th-script {
+    font-family: 'JNK Plex Mono', 'Courier New', monospace;
+    font-size: 0.95em;
+}
+
+.jnk-th-script .jnk-sc-head {
+    padding: 0;
+    border: none;
+}
+
+.jnk-sc-slug {
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.jnk-th-script .jnk-iv-title {
+    margin: 16px 0 4px;
+    font-size: 1.05em;
+    font-weight: 700;
+    text-align: center;
+    text-decoration: underline;
+    text-transform: uppercase;
+}
+
+.jnk-th-script .jnk-iv-meta {
+    text-align: center;
+}
+
+.jnk-th-script .jnk-iv-turns {
+    gap: 16px;
+}
+
+.jnk-sc-name {
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.jnk-sc-paren {
+    color: var(--jnk-muted);
+    text-align: center;
+}
+
+.jnk-sc-line {
+    margin: 0 14%;
+}
+
+.jnk-th-script .jnk-dir {
+    font-style: normal;
+}
+
+.jnk-sc-turn.jnk-own {
+    position: relative;
+}
+
+.jnk-sc-turn.jnk-own::after {
+    content: '*';
+    position: absolute;
+    top: 0;
+    right: 0;
+    font-weight: 700;
+}
+
+.jnk-th-script .jnk-round {
+    margin-top: 18px;
+    padding-top: 0;
+    border-top: none;
+}
+
+.jnk-th-script .jnk-round::before {
+    content: 'СМЕНА КАДРА:';
+    align-self: flex-end;
+    font-weight: 700;
+}
+
+.jnk-th-script .jnk-round-head {
+    font-size: 1em;
+    letter-spacing: 0;
+}
+
+/* --- Досье --- */
+
+.jnk-th-dossier.jnk-paper-day {
+    --jnk-paper-bg: #eeebe2;
+    --jnk-ink: #1c1c1a;
+    --jnk-muted: #5f5e5a;
+    --jnk-rule: #1c1c1a;
+    --jnk-stamp: #a32d2d;
+}
+
+.jnk-th-dossier.jnk-paper-night {
+    --jnk-paper-bg: #232321;
+    --jnk-ink: #dcd9d0;
+    --jnk-muted: #9a978e;
+    --jnk-rule: #77756e;
+    --jnk-stamp: #e0726d;
+}
+
+.jnk-th-dossier {
+    font-family: 'JNK PT Mono', 'Courier New', monospace;
+    font-size: 0.95em;
+}
+
+.jnk-th-dossier .jnk-ds-head {
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--jnk-rule);
+}
+
+.jnk-ds-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-weight: 700;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+}
+
+.jnk-ds-stamp {
+    flex-shrink: 0;
+    padding: 2px 10px;
+    color: var(--jnk-stamp);
+    letter-spacing: 3px;
+    border: 2px solid var(--jnk-stamp);
+    border-radius: 3px;
+    transform: rotate(-6deg);
+    opacity: 0.85;
+}
+
+.jnk-ds-field {
+    font-size: 0.9em;
+    line-height: 1.6;
+}
+
+.jnk-ds-field > span {
+    color: var(--jnk-muted);
+    text-transform: uppercase;
+}
+
+.jnk-ds-subject .jnk-iv-title {
+    display: inline;
+    font-size: 1em;
+    font-weight: 700;
+    line-height: 1.6;
+}
+
+.jnk-th-dossier .jnk-iv-turns {
+    gap: 10px;
+}
+
+.jnk-ds-label {
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+.jnk-ds-q .jnk-ds-label {
+    color: var(--jnk-muted);
+}
+
+.jnk-th-dossier .jnk-dir {
+    font-style: normal;
+}
+
+.jnk-th-dossier .jnk-dir::before {
+    content: '[';
+}
+
+.jnk-th-dossier .jnk-dir::after {
+    content: ']';
+}
+
+.jnk-ds-turn.jnk-own {
+    padding-left: 10px;
+    border-left: 3px solid var(--jnk-stamp);
+}
+
+.jnk-th-dossier .jnk-round {
+    border-top: 1px dashed var(--jnk-rule);
+}
+
+.jnk-th-dossier .jnk-round-head {
+    font-size: 0.95em;
+    letter-spacing: 1px;
+}
+
+.jnk-ds-end {
+    margin-top: 6px;
+    color: var(--jnk-muted);
+    font-size: 0.85em;
+    letter-spacing: 2px;
+    text-align: center;
+    text-transform: uppercase;
+}
+
+.jnk-th-dossier .jnk-feed {
+    border-top: 1px dashed var(--jnk-rule);
+}
+
+/* Темы на телефоне */
+
+@media (max-width: 600px) {
+    .jnk-paper {
+        padding: 16px;
+    }
+
+    .jnk-msg-row {
+        max-width: 94%;
+    }
+
+    .jnk-sc-line {
+        margin: 0 4%;
+    }
+
+    .jnk-th-newspaper .jnk-iv-title {
+        font-size: 1.6em;
+    }
 }
 
 /* ПК: окно пошире и фиксированной высоты, прокручивается только содержимое */

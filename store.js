@@ -41,6 +41,10 @@ export const DEFAULT_SETTINGS = Object.freeze({
     // Реакции фандома
     feedStyle: 'bl-feed',        // стиль ленты (feeds/*.md)
     feedCount: 12,               // сколько комментов в пачке
+
+    // Оформление
+    theme: 'magazine',           // тема интервью (themes.js)
+    paper: 'day',                // бумага для Газеты, Сценария и Досье: 'day' | 'night'
 });
 
 export function ctx() {

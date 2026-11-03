@@ -1,22 +1,37 @@
-// Junket — настройки в ящике расширений.
-// Категории сворачиваются, как в Koma и DS Comments. При открытии все свёрнуты.
+// Junket — настройки. Живут в самом окне (шестерёнка в шапке),
+// в ящике расширений осталась только кнопка «Открыть Junket».
+// Категории сворачиваются, как в Koma и DS Comments. Открыто сразу только «Оформление».
 
 import { ctx, getSettings, saveSettings, escapeHtml } from './store.js';
 import { LANGUAGES } from './formats.js';
+import { THEMES, PAPERS, getTheme, normalizePaper, stageClass, DEMO_ITEM, DEMO_PERSONA } from './themes.js';
+import { renderInterviewHtml } from './render.js';
 
-function categoryHtml(icon, title, body) {
+function categoryHtml(icon, title, body, open = false) {
     return `
         <div class="jnk-cat">
-            <button type="button" class="jnk-cat-head" aria-expanded="false">
+            <button type="button" class="jnk-cat-head" aria-expanded="${open}">
                 <span><i class="fa-solid ${icon} fa-fw"></i> ${title}</span>
                 <i class="fa-solid fa-chevron-down jnk-cat-chevron"></i>
             </button>
-            <div class="jnk-cat-body" hidden>${body}</div>
+            <div class="jnk-cat-body" ${open ? '' : 'hidden'}>${body}</div>
         </div>`;
 }
 
-function buildHtml() {
+/** Содержимое экрана настроек в окне. */
+export function settingsPaneHtml() {
     const s = getSettings();
+    const paper = normalizePaper(s.paper);
+
+    const look = `
+        <div class="jnk-label">Тема интервью</div>
+        <div class="jnk-theme-grid" id="jnk_theme_grid"></div>
+        <div class="jnk-label">Бумага</div>
+        <div class="jnk-seg" id="jnk_paper">
+            ${PAPERS.map((p) => `<button type="button" class="jnk-seg-btn ${p.id === paper ? 'active' : ''}" data-paper="${p.id}">${p.label}</button>`).join('')}
+        </div>
+        <div class="jnk-set-hint">Для Газеты, Сценария и Досье. Переключается и прямо в интервью.</div>`;
+
     const custom = s.promptSource === 'custom';
 
     const model = `
@@ -82,24 +97,57 @@ function buildHtml() {
         </div>`;
 
     return `
+        <div class="jnk-settings jnk-settings-window" id="jnk_settings_root">
+            ${categoryHtml('fa-palette', 'Оформление', look, true)}
+            ${categoryHtml('fa-plug', 'Модель для интервью', model)}
+            ${categoryHtml('fa-book', 'Лорбуки', lore)}
+            ${categoryHtml('fa-key', 'Джейлбрейк', jailbreak)}
+        </div>`;
+}
+
+function drawerHtml() {
+    return `
         <div class="inline-drawer">
             <div class="inline-drawer-toggle inline-drawer-header">
                 <b><i class="fa-solid fa-clapperboard" style="margin-right: 6px;"></i>「 JUNKET 」</b>
                 <div class="inline-drawer-icon fa-solid fa-circle-chevron-down down"></div>
             </div>
             <div class="inline-drawer-content">
-                <div class="jnk-settings" id="jnk_settings_root">
-                    <div class="jnk-drawer-hint">Интервью с актёрами по выбранным сценам чата.</div>
+                <div class="jnk-settings">
+                    <div class="jnk-drawer-hint">Интервью с актёрами по выбранным сценам чата. Настройки — под шестерёнкой в окне.</div>
                     <button class="menu_button jnk-open-btn" type="button">
                         <i class="fa-solid fa-clapperboard"></i>
                         <span>Открыть Junket</span>
                     </button>
-                    ${categoryHtml('fa-plug', 'Модель для интервью', model)}
-                    ${categoryHtml('fa-book', 'Лорбуки', lore)}
-                    ${categoryHtml('fa-key', 'Джейлбрейк', jailbreak)}
                 </div>
             </div>
         </div>`;
+}
+
+// ---------- Оформление ----------
+
+/** Карточки тем: в каждой — демо-кусочек, нарисованный настоящей вёрсткой. */
+function renderThemeGrid() {
+    const grid = document.getElementById('jnk_theme_grid');
+    if (!grid) return;
+    const s = getSettings();
+    const current = getTheme(s.theme).id;
+    grid.innerHTML = THEMES.map((t) => `
+        <div class="jnk-theme-card ${t.id === current ? 'jnk-theme-on' : ''}" data-theme="${t.id}" role="button" tabindex="0" aria-pressed="${t.id === current}">
+            <div class="jnk-theme-name">${escapeHtml(t.label)}</div>
+            <div class="jnk-theme-preview" aria-hidden="true">
+                <div class="${stageClass(t.id, s.paper)}">
+                    ${renderInterviewHtml(DEMO_ITEM, { theme: t.id, paper: s.paper, personaName: DEMO_PERSONA, preview: true })}
+                </div>
+            </div>
+        </div>`).join('');
+}
+
+/** Обновить выбор темы и бумаги на экране настроек (если бумагу переключили из интервью). */
+export function syncLookControls() {
+    const paper = normalizePaper(getSettings().paper);
+    document.querySelectorAll('#jnk_paper .jnk-seg-btn').forEach((b) => b.classList.toggle('active', b.dataset.paper === paper));
+    renderThemeGrid();
 }
 
 /** Выпадашку профилей рисует и обновляет сама таверна (как в Koma). */
@@ -144,25 +192,58 @@ function bindNumber(id, key, min, max, fallback) {
     });
 }
 
+/** Ящик в расширениях таверны: только кнопка открытия окна. */
 export function addSettingsDrawer(onOpenWindow) {
     const host = document.getElementById('extensions_settings2') || document.getElementById('extensions_settings');
     if (!host || document.getElementById('jnk-settings')) return;
 
     const wrap = document.createElement('div');
     wrap.id = 'jnk-settings';
-    wrap.innerHTML = buildHtml();
+    wrap.innerHTML = drawerHtml();
     host.appendChild(wrap);
 
     wrap.querySelector('.jnk-open-btn').addEventListener('click', () => onOpenWindow());
+}
+
+/**
+ * Оживить экран настроек. Вызывается один раз, когда окно уже в документе
+ * (выпадашку профилей таверна ищет по id).
+ */
+export function bindSettingsPane() {
+    const root = document.getElementById('jnk_settings_root');
+    if (!root) return;
 
     // Категории
-    document.getElementById('jnk_settings_root').addEventListener('click', (e) => {
+    root.addEventListener('click', (e) => {
         const head = e.target.closest('.jnk-cat-head');
         if (!head) return;
         const expanded = head.getAttribute('aria-expanded') === 'true';
         head.setAttribute('aria-expanded', String(!expanded));
         const body = head.nextElementSibling;
         if (body) body.hidden = expanded;
+    });
+
+    // Оформление
+    renderThemeGrid();
+    const grid = document.getElementById('jnk_theme_grid');
+    const pickTheme = (card) => {
+        if (!card) return;
+        getSettings().theme = getTheme(card.dataset.theme).id;
+        saveSettings();
+        renderThemeGrid();
+    };
+    grid.addEventListener('click', (e) => pickTheme(e.target.closest('.jnk-theme-card')));
+    grid.addEventListener('keydown', (e) => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        pickTheme(e.target.closest('.jnk-theme-card'));
+    });
+    document.getElementById('jnk_paper').addEventListener('click', (e) => {
+        const btn = e.target.closest('.jnk-seg-btn');
+        if (!btn) return;
+        getSettings().paper = normalizePaper(btn.dataset.paper);
+        saveSettings();
+        syncLookControls();
     });
 
     // Источник модели

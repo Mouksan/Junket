@@ -8,6 +8,7 @@
 // Этап 5в: банк вопросов — списки, «именно эти» / «как примеры», редактор
 // Этап 5г: вопросы из зала — раунды под интервью
 // Реакции фандома: лента комментов под интервью (порт из ST-Comments)
+// Темы: Журнал, Мессенджер, Газета, Сценарий, Досье; настройки переехали в окно (шестерёнка)
 
 import {
     ctx, getSettings, saveSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
@@ -23,7 +24,8 @@ import {
     parseComments, renderFeedHtml, feedPlainText,
 } from './comments.js';
 import { requestModel } from './connection.js';
-import { addSettingsDrawer } from './settings.js';
+import { addSettingsDrawer, settingsPaneHtml, bindSettingsPane, syncLookControls } from './settings.js';
+import { getTheme, normalizePaper, stageClass } from './themes.js';
 import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle, fullInterviewText } from './render.js';
 import {
     FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, BANK_MODES, QUESTIONS_MIN, QUESTIONS_MAX,
@@ -36,6 +38,7 @@ import { getBank, getList, listQuestions, addList, updateList, deleteList, quest
 
 let overlayEl = null;
 let activeTab = 'new';
+let settingsOpen = false;   // экран настроек поверх вкладок
 
 function buildWindow() {
     const overlay = document.createElement('div');
@@ -46,6 +49,7 @@ function buildWindow() {
             <div class="jnk-header">
                 <div class="jnk-title"><i class="fa-solid fa-clapperboard"></i><span>「 JUNKET 」</span></div>
                 <div class="jnk-chatname"></div>
+                <button class="jnk-icon-btn jnk-gear" type="button" title="Настройки" aria-pressed="false"><i class="fa-solid fa-gear"></i></button>
                 <button class="jnk-close" type="button" title="Закрыть"><i class="fa-solid fa-xmark"></i></button>
             </div>
             <div class="jnk-tabs">
@@ -57,10 +61,19 @@ function buildWindow() {
                 <section class="jnk-pane" data-pane="new"></section>
                 <section class="jnk-pane" data-pane="cast"></section>
                 <section class="jnk-pane" data-pane="archive"></section>
+                <section class="jnk-pane" data-pane="settings">
+                    <div class="jnk-viewer-bar">
+                        <button class="jnk-btn jnk-settings-back" type="button"><i class="fa-solid fa-arrow-left"></i> Назад</button>
+                        <span class="jnk-settings-heading">Настройки</span>
+                    </div>
+                    ${settingsPaneHtml()}
+                </section>
             </div>
         </div>`;
 
     overlay.querySelector('.jnk-close').addEventListener('click', closeWindow);
+    overlay.querySelector('.jnk-gear').addEventListener('click', () => (settingsOpen ? closeSettings() : openSettings()));
+    overlay.querySelector('.jnk-settings-back').addEventListener('click', closeSettings);
 
     // Клик мимо окна закрывает его (mousedown, чтобы выделение текста не закрывало случайно)
     overlay.addEventListener('mousedown', (e) => {
@@ -72,7 +85,22 @@ function buildWindow() {
     });
 
     document.body.appendChild(overlay);
+    bindSettingsPane();
     return overlay;
+}
+
+function openSettings() {
+    settingsOpen = true;
+    renderTabs();
+    overlayEl?.querySelector('.jnk-body')?.scrollTo?.(0, 0);
+}
+
+function closeSettings() {
+    settingsOpen = false;
+    renderTabs();
+    // Тему, язык или лимиты могли поменять — перерисуем то, что от них зависит
+    renderNewPane();
+    renderArchive();
 }
 
 function onKeyDown(e) {
@@ -81,6 +109,10 @@ function onKeyDown(e) {
         if (document.querySelector('dialog[open]')) return;
         if (bankEditorEl && !bankEditorEl.hidden) {
             closeBankEditor();
+            return;
+        }
+        if (settingsOpen) {
+            closeSettings();
             return;
         }
         closeWindow();
@@ -94,6 +126,7 @@ function isOpen() {
 function openWindow(tab) {
     if (!overlayEl) overlayEl = buildWindow();
     if (tab) activeTab = tab;
+    settingsOpen = false;
     overlayEl.classList.add('jnk-open');
     document.addEventListener('keydown', onKeyDown);
     // Лорбуки могли поменяться, пока окно было закрыто — веса пересчитаем
@@ -109,6 +142,7 @@ function closeWindow() {
 
 function switchTab(tab) {
     activeTab = tab;
+    settingsOpen = false;
     renderTabs();
     // Каст могли поменять — «Кто в студии» на новом интервью должен это увидеть
     if (tab === 'new') renderNewPane();
@@ -134,11 +168,16 @@ function renderHeader() {
 
 function renderTabs() {
     if (!overlayEl) return;
+    overlayEl.classList.toggle('jnk-settings-on', settingsOpen);
+    const gear = overlayEl.querySelector('.jnk-gear');
+    gear?.classList.toggle('jnk-active', settingsOpen);
+    gear?.setAttribute('aria-pressed', String(settingsOpen));
     overlayEl.querySelectorAll('.jnk-tab').forEach((btn) => {
         btn.classList.toggle('jnk-active', btn.dataset.tab === activeTab);
     });
+    const shown = settingsOpen ? 'settings' : activeTab;
     overlayEl.querySelectorAll('.jnk-pane').forEach((pane) => {
-        pane.classList.toggle('jnk-active', pane.dataset.pane === activeTab);
+        pane.classList.toggle('jnk-active', pane.dataset.pane === shown);
     });
 }
 
@@ -1051,19 +1090,46 @@ function renderArchive() {
     });
 }
 
+function paperButtonHtml(paper) {
+    const night = paper === 'night';
+    return `<button class="jnk-btn jnk-paper-btn" type="button" title="${night ? 'Дневная бумага' : 'Ночная бумага'}">${night ? '☀' : '🌙'}</button>`;
+}
+
+/** ☀/🌙 в панели интервью: меняем классы на месте, без перерисовки. */
+function togglePaper(pane) {
+    const s = getSettings();
+    s.paper = normalizePaper(s.paper) === 'night' ? 'day' : 'night';
+    saveSettings();
+    const stage = pane.querySelector('.jnk-stage');
+    if (stage) stage.className = stageClass(s.theme, s.paper);
+    pane.querySelectorAll('.jnk-sc-time').forEach((el) => {
+        el.textContent = s.paper === 'night' ? 'НОЧЬ' : 'ДЕНЬ';
+    });
+    const btn = pane.querySelector('.jnk-paper-btn');
+    if (btn) btn.outerHTML = paperButtonHtml(s.paper);
+    pane.querySelector('.jnk-paper-btn')?.addEventListener('click', () => togglePaper(pane));
+    syncLookControls();
+}
+
 function renderArchiveViewer(pane, item) {
+    const s = getSettings();
+    const theme = getTheme(s.theme);
+    const paper = normalizePaper(s.paper);
     pane.innerHTML = `
         <div class="jnk-viewer-bar">
             <button class="jnk-btn jnk-back" type="button"><i class="fa-solid fa-arrow-left"></i> Все интервью</button>
             <div class="jnk-viewer-actions">
+                ${theme.paper ? paperButtonHtml(paper) : ''}
                 <button class="jnk-btn jnk-fav ${item.favorite ? 'jnk-fav-on' : ''}" type="button" title="${item.favorite ? 'Убрать из избранного' : 'В избранное'}">${item.favorite ? '★' : '☆'}</button>
                 ${item.studio === 'characters' || !String(item.text || '').trim() ? '' : '<button class="jnk-btn jnk-pin" type="button">📌 Закрепить каст</button>'}
                 <button class="jnk-btn jnk-copy" type="button"><i class="fa-regular fa-copy"></i> Скопировать</button>
                 <button class="jnk-btn jnk-btn-danger jnk-remove" type="button"><i class="fa-solid fa-trash-can"></i> Удалить</button>
             </div>
         </div>
-        ${renderInterviewHtml(item)}
-        ${renderFeedHtml(item.feed)}
+        <div class="${stageClass(theme.id, paper)}">
+            ${renderInterviewHtml(item, { theme: theme.id, paper })}
+            ${renderFeedHtml(item.feed, theme.id)}
+        </div>
         ${String(item.text || '').trim() ? audiencePanelHtml(item) : ''}`;
 
     pane.querySelector('.jnk-back').addEventListener('click', () => {
@@ -1077,6 +1143,7 @@ function renderArchiveViewer(pane, item) {
         else toastr.error('Не получилось скопировать', TOAST_TITLE);
     });
     pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
+    pane.querySelector('.jnk-paper-btn')?.addEventListener('click', () => togglePaper(pane));
     pane.querySelector('.jnk-pin')?.addEventListener('click', () => pinCast(item));
     pane.querySelector('.jnk-fav').addEventListener('click', (e) => toggleFavorite(item.id, e.currentTarget));
     pane.querySelector('.jnk-feed-delete')?.addEventListener('click', () => deleteFeed(item.id));
