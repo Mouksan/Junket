@@ -55,6 +55,14 @@ Formality: informal and playful.`,
         prompt: `A tabloid interview: the journalist digs for gossip, ships the actors with each other, asks provocative and loaded questions and tries to catch them off guard. The actors dodge, deflect and sometimes slip.`,
     },
     {
+        id: 'pilot',
+        formality: null,   // градус задаёт «где снимаем» (PILOT_VENUES)
+        icon: '🔮',
+        label: 'После пилота',
+        questions: 6,
+        prompt: `An interview right after the pilot episode. Nobody knows what happens next: the interviewer asks about the future of the story and the relationships, and everyone guesses, theorizes, argues and makes bets.`,
+    },
+    {
         id: 'reaction',
         formality: 'informal',
         icon: '👀',
@@ -64,6 +72,34 @@ Formality: informal and playful.`,
 Formality: completely informal. Teasing, fandom jokes, slang and swearing are welcome.`,
     },
 ];
+
+// Только для «После пилота»: где снимают — от этого градус
+export const PILOT_VENUES = [
+    {
+        id: 'premiere',
+        formality: 'formal',
+        label: 'Пресс-день премьеры',
+        short: 'Пресс-день',
+        prompt: 'Venue: a press day at the premiere. Professional and on message, like a press junket: polished promo answers, careful teasing, no vulgar jokes, no slang, no swearing.',
+    },
+    {
+        id: 'podcast',
+        formality: 'informal',
+        label: 'Подкаст после пилота',
+        short: 'Подкаст',
+        prompt: 'Venue: a relaxed podcast recorded right after the pilot. Completely informal: jokes, teasing, wild theories, slang and swearing are welcome.',
+    },
+];
+
+export function getPilotVenue(id) {
+    return PILOT_VENUES.find((v) => v.id === id) || PILOT_VENUES[1];
+}
+
+/** «После пилота»: интервью о будущем, все только гадают. */
+export function isPilot(shootOrFormat) {
+    const id = typeof shootOrFormat === 'string' ? shootOrFormat : shootOrFormat?.format;
+    return id === 'pilot';
+}
 
 /** «Реакция на сцену»: без интервьюера, вместо вопросов — моменты. */
 export function isReaction(shootOrFormat) {
@@ -176,7 +212,8 @@ export function getFormat(id) {
 /** 'formal' | 'informal' — градус выбранного формата (у фанатов — по площадке). */
 export function getFormality(shoot) {
     const format = getFormat(shoot.format);
-    return format.formality || getVenue(shoot.venue).formality;
+    if (format.formality) return format.formality;
+    return isPilot(format.id) ? getPilotVenue(shoot.pilotVenue).formality : getVenue(shoot.venue).formality;
 }
 
 export function getVenue(id) {
@@ -192,6 +229,7 @@ export function defaultShoot() {
         format: 'junket',
         questions: getFormat('junket').questions,
         venue: 'stream',
+        pilotVenue: 'podcast',   // «После пилота»: пресс-день или подкаст
         banter: 'light',
         vibes: { chemistry: null, interviewer: null, rating: null },
         wishes: '',
@@ -230,6 +268,7 @@ export function normalizeShoot(saved) {
         format,
         questions,
         venue: FAN_VENUES.some((v) => v.id === s.venue) ? s.venue : base.venue,
+        pilotVenue: PILOT_VENUES.some((v) => v.id === s.pilotVenue) ? s.pilotVenue : base.pilotVenue,
         banter: BANTER.some((b) => b.id === s.banter) ? s.banter : base.banter,
         vibes,
         wishes: typeof s.wishes === 'string' ? s.wishes : '',
@@ -242,11 +281,13 @@ export function normalizeShoot(saved) {
     };
 }
 
-/** Подпись формата для архива: «📺 Ток-шоу», «💌 Вопросы фанатов (Стрим)». */
+/** Подпись формата для архива: «📺 Ток-шоу», «💌 Вопросы фанатов (Стрим)», «🔮 После пилота (Подкаст)». */
 export function formatLabel(formatId, venueId) {
     const f = FORMATS.find((x) => x.id === formatId);
     if (!f) return '';
-    const venue = f.id === 'fans' && venueId ? ` (${getVenue(venueId).label})` : '';
+    let venue = '';
+    if (f.id === 'fans' && venueId) venue = ` (${getVenue(venueId).label})`;
+    if (f.id === 'pilot' && venueId) venue = ` (${getPilotVenue(venueId).short})`;
     return `${f.icon} ${f.label}${venue}`;
 }
 

@@ -3,14 +3,24 @@
 
 import { getMainRoles, normalizeCast } from './cast.js';
 import { getList, listQuestions, pickQuestions } from './bank.js';
-import { getFormat, getVenue, getBanter, getFormality, VIBES, normalizeShoot, getLanguage, isReaction, getWatchPlace, topicList } from './formats.js';
+import { getFormat, getVenue, getBanter, getFormality, VIBES, normalizeShoot, getLanguage, isReaction, isPilot, getPilotVenue, getWatchPlace, topicList } from './formats.js';
 import { getSettings } from './store.js';
 
-function formatBlock(shoot) {
+/** Описание формата и площадки (у фанатов и «После пилота» градус задаёт площадка). */
+function formatPromptLines(shoot) {
     const format = getFormat(shoot.format);
     const lines = [format.prompt];
     if (format.id === 'fans') lines.push(getVenue(shoot.venue).prompt);
+    if (format.id === 'pilot') lines.push(getPilotVenue(shoot.pilotVenue).prompt);
+    return lines;
+}
+
+function formatBlock(shoot) {
+    const lines = formatPromptLines(shoot);
     lines.push(`Exactly ${shoot.questions} main questions from the interviewer.`);
+    if (isPilot(shoot)) {
+        lines.push('After the main questions, the interviewer always ends with one final question: everyone places a bet on what will happen next in the story. Each person answers it with one or two sentences. This final question does not count toward the main questions.');
+    }
     lines.push(`${getBanter(shoot.banter).prompt} Follow-ups and reactions do not count toward the number of main questions.`);
     lines.push('Several actors may answer the same question.');
     return lines.join('\n');
@@ -32,6 +42,22 @@ function reactionFormatBlock(shoot) {
 - A few closing lines after the last moment are fine.`);
     lines.push(getBanter(shoot.banter).reaction);
     return lines.join('\n');
+}
+
+// «После пилота»: всё, что дальше SCENES, никому не известно — только догадки
+function pilotBlock(shoot) {
+    if (!isPilot(shoot)) return '';
+    const actors = shoot.studio !== 'characters';
+    const own = actors
+        ? `- The actors also share first impressions of the pilot, of their characters and of each other, and what they hope the writers will do with their characters.`
+        : `- The characters predict their own future with full conviction and in their own voice, with whatever denial, pride or lies their personalities bring: sworn enemies insist nothing will ever happen between them. Their relationships are exactly as they stand at the end of SCENES.`;
+    return `
+
+PREDICTIONS
+- Everything beyond SCENES is unknown to everyone. They guess, theorize, argue and bet on where the story is going and how the relationships will develop.
+- Guesses are concrete, varied and grounded in details of SCENES and the setting: possible twists, secrets, betrayals, alliances, romance, rivalries, what each of them fears and hopes for.
+- The character card, persona and lorebooks give knowledge of the world only. If they contain plans, summaries or events beyond SCENES, nobody knows those: never state them as facts. At most, someone may make a guess that happens to point that way.
+${own}`;
 }
 
 function topicsBlock(shoot) {
@@ -113,6 +139,12 @@ function wishesBlock(shoot) {
     return wishes ? `\n\nUSER WISHES (follow them)\n${wishes}` : '';
 }
 
+function modeOf(shoot) {
+    if (isReaction(shoot)) return 'reaction';
+    if (isPilot(shoot)) return 'pilot';
+    return 'interview';
+}
+
 // Кто в студии: главные роли + позванные НПС (каст — из вкладки «Кастинг»)
 function studioPeople(shoot, cast) {
     const mains = getMainRoles().map((role) => ({ name: role.name, ...(cast.mains[role.name] || { actor: '', notes: '' }), npc: false }));
@@ -167,12 +199,15 @@ function whoCharacters(people) {
     return people.map((p) => `- ${p.npc ? `${p.name} (supporting character)` : p.name}`).join('\n');
 }
 
-function actorsPart(people, language, reaction = false, otherCast = '') {
-    const now = reaction
-        ? 'Now the actors watch the edited footage of these scenes together, as described in FORMAT.'
-        : 'Now the actors sit down together for the interview described in FORMAT, about filming these scenes.';
+// mode: 'interview' | 'reaction' | 'pilot'
+function actorsPart(people, language, mode = 'interview', otherCast = '') {
+    const premise = {
+        interview: 'The scenes in SCENES were just filmed. Now the actors sit down together for the interview described in FORMAT, about filming these scenes.',
+        reaction: 'The scenes in SCENES were just filmed. Now the actors watch the edited footage of these scenes together, as described in FORMAT.',
+        pilot: 'SCENES is the pilot episode, just filmed. The actors have only read and played the pilot: the rest of the script is kept secret from them. Now they sit down together for the interview described in FORMAT.',
+    }[mode];
     return `PREMISE
-The roleplay story in the context is treated as a TV series being filmed. Its characters are played by actors. The scenes in SCENES were just filmed. ${now}
+The roleplay story in the context is treated as a TV series being filmed. Its characters are played by actors. ${premise}
 
 WHO IS INTERVIEWED
 ${whoActors(people)}${otherCast}
@@ -189,10 +224,12 @@ THE ACTORS
 - The actors know the story only up to the end of SCENES. No spoilers or guesses beyond it presented as facts.`;
 }
 
-function charactersPart(people, reaction = false) {
-    const premise = reaction
-        ? 'The roleplay story in the context was filmed as a TV series. Now the characters themselves — not actors — watch the footage of SCENES together, as described in FORMAT, and react to what happened and how it was shown.'
-        : 'The roleplay story in the context was filmed as a TV series, and its characters have just watched the footage of SCENES. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about what happened in these scenes and how it was shown.';
+function charactersPart(people, mode = 'interview') {
+    const premise = {
+        interview: 'The roleplay story in the context was filmed as a TV series, and its characters have just watched the footage of SCENES. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about what happened in these scenes and how it was shown.',
+        reaction: 'The roleplay story in the context was filmed as a TV series. Now the characters themselves — not actors — watch the footage of SCENES together, as described in FORMAT, and react to what happened and how it was shown.',
+        pilot: 'The roleplay story in the context is being filmed as a TV series, and SCENES is its pilot episode, which the characters have just watched. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about what they think will happen to them next.',
+    }[mode];
     return `PREMISE
 ${premise}
 
@@ -236,10 +273,10 @@ ${speakerTag}`;
 
     let instruction = `You are writing a fictional ${actors && !reaction ? 'behind-the-scenes ' : ''}${piece}.
 
-${actors ? actorsPart(people, language, reaction, otherCastBlock(shoot, cast)) : charactersPart(people, reaction)}
+${actors ? actorsPart(people, language, modeOf(shoot), otherCastBlock(shoot, cast)) : charactersPart(people, modeOf(shoot))}
 
 FORMAT
-${reaction ? reactionFormatBlock(shoot) : formatBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${bankBlock(shoot)}${reaction ? topicsBlock(shoot) : ''}${wishesBlock(shoot)}
+${reaction ? reactionFormatBlock(shoot) : formatBlock(shoot)}${pilotBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${bankBlock(shoot)}${reaction ? topicsBlock(shoot) : ''}${wishesBlock(shoot)}
 
 ${rhythmBlock(shoot)}
 
@@ -292,9 +329,7 @@ export function buildAudiencePrompt({ sourcesText, sceneText, from, to, shoot: r
         ? '[A: Actor Name (Character Name)] an answer — Character Name exactly as listed in WHO IS INTERVIEWED'
         : `[A: Speaker Name (Character Name)] an answer — Speaker Name is the character's own name in ${language}, Character Name exactly as listed in WHO IS INTERVIEWED`;
 
-    const format = getFormat(shoot.format);
-    const formatLines = [format.prompt];
-    if (format.id === 'fans') formatLines.push(getVenue(shoot.venue).prompt);
+    const formatLines = formatPromptLines(shoot);
     formatLines.push(getBanter(shoot.banter).prompt);
 
     const ownBlock = own.length
@@ -305,10 +340,10 @@ ${own.map((q, i) => `  ${i + 1}. ${q}`).join('\n')}`
 
     const instruction = `You are continuing a fictional ${actors ? 'behind-the-scenes ' : ''}interview with a segment of questions from the audience.
 
-${actors ? actorsPart(people, language, false, otherCastBlock(shoot, cast)) : charactersPart(people)}
+${actors ? actorsPart(people, language, modeOf(shoot), otherCastBlock(shoot, cast)) : charactersPart(people, modeOf(shoot))}
 
 FORMAT OF THE INTERVIEW
-${formatLines.join('\n')}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${wishesBlock(shoot)}
+${formatLines.join('\n')}${pilotBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${wishesBlock(shoot)}
 
 AUDIENCE SEGMENT
 - INTERVIEW SO FAR contains the interview already recorded. Continue it: the host briefly opens the floor to the audience in one short [Q] line, even if the interview already said goodbye.

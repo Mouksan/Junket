@@ -30,7 +30,7 @@ import { getTheme, normalizePaper, stageClass } from './themes.js';
 import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle, fullInterviewText } from './render.js';
 import {
     FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, BANK_MODES, QUESTIONS_MIN, QUESTIONS_MAX,
-    getFormat, normalizeShoot, formatLabel, isReaction, WATCH_PLACES, MOMENTS_MAX,
+    getFormat, normalizeShoot, formatLabel, isReaction, WATCH_PLACES, MOMENTS_MAX, PILOT_VENUES,
 } from './formats.js';
 import { getMainRoles, normalizeCast, newNpc, invitableNpcs, castFromTurns, applyCast } from './cast.js';
 import { getBank, getList, listQuestions, addList, updateList, deleteList, questionsWord, parseGeneratedQuestions } from './bank.js';
@@ -435,6 +435,12 @@ function shootSectionHtml() {
                 <div class="jnk-chips">${chipsHtml(FAN_VENUES, shoot.venue, 'data-venue')}</div>
             </div>
 
+            <div class="jnk-venue jnk-pilot-venue" ${shoot.format === 'pilot' ? '' : 'hidden'}>
+                <div class="jnk-subtitle">Где снимаем</div>
+                <div class="jnk-chips">${chipsHtml(PILOT_VENUES, shoot.pilotVenue, 'data-pilotvenue')}</div>
+                <div class="jnk-hint">В конце каждый делает ставку на будущее — это отдельный вопрос, он не входит в число вопросов.</div>
+            </div>
+
             <div class="jnk-reaction" ${reaction ? '' : 'hidden'}>
                 <div class="jnk-subtitle">Где смотрят</div>
                 <div class="jnk-chips" data-place-group>${chipsHtml(WATCH_PLACES, shoot.place, 'data-place')}</div>
@@ -478,7 +484,8 @@ function questionsHint(reaction) {
 /** Переключение формата: «Реакция» прячет вопросы, банк и интервьюера, показывает свои поля. */
 function applyFormatUi(section, shoot) {
     const reaction = isReaction(shoot);
-    section.querySelector('.jnk-venue').hidden = shoot.format !== 'fans';
+    section.querySelector('.jnk-venue:not(.jnk-pilot-venue)').hidden = shoot.format !== 'fans';
+    section.querySelector('.jnk-pilot-venue').hidden = shoot.format !== 'pilot';
     section.querySelectorAll('.jnk-reaction').forEach((el) => { el.hidden = !reaction; });
     section.querySelector('.jnk-bank-wrap').hidden = reaction;
     section.querySelectorAll('[data-no-reaction]').forEach((row) => { row.hidden = reaction; });
@@ -577,6 +584,9 @@ function bindShootSection(pane) {
         } else if (btn.dataset.venue) {
             shoot.venue = btn.dataset.venue;
             setOn('[data-venue]', btn);
+        } else if (btn.dataset.pilotvenue) {
+            shoot.pilotVenue = btn.dataset.pilotvenue;
+            setOn('[data-pilotvenue]', btn);
         } else if (btn.dataset.banter) {
             shoot.banter = btn.dataset.banter;
             section.querySelectorAll('[data-banter]').forEach((b) => b.classList.toggle('active', b === btn));
@@ -812,7 +822,7 @@ async function onGoClick() {
             studio: shoot.studio,
             shoot: { ...shoot },    // весь выбор «Как снимаем» — чтобы вопросы из зала звучали тем же голосом
             rounds: [],
-            venue: shoot.format === 'fans' ? shoot.venue : null,
+            venue: shoot.format === 'fans' ? shoot.venue : shoot.format === 'pilot' ? shoot.pilotVenue : null,
             text,
         };
         const saveTo = getChatStore();
