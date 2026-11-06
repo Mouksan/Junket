@@ -60,7 +60,7 @@ Formality: informal and playful.`,
         icon: '🔮',
         label: 'После пилота',
         questions: 6,
-        prompt: `An interview right after the pilot episode. Nobody knows what happens next: the interviewer asks about the future of the story and the relationships, and everyone guesses, theorizes, argues and makes bets.`,
+        prompt: `An interview right after the pilot episode, about the series as a whole. Nobody knows how the story goes on: the interviewer asks where the whole story is heading and where the relationships will end up by the finale, and everyone guesses, theorizes, argues and makes bets.`,
     },
     {
         id: 'reaction',

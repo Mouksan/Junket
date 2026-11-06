@@ -19,7 +19,7 @@ function formatBlock(shoot) {
     const lines = formatPromptLines(shoot);
     lines.push(`Exactly ${shoot.questions} main questions from the interviewer.`);
     if (isPilot(shoot)) {
-        lines.push('After the main questions, the interviewer always ends with one final question: everyone places a bet on what will happen next in the story. Each person answers it with one or two sentences. This final question does not count toward the main questions.');
+        lines.push('After the main questions, the interviewer always ends with one final question: everyone places a bet on how the story ends — where their relationship stands in the finale. Each person answers it with one or two sentences. This final question does not count toward the main questions.');
     }
     lines.push(`${getBanter(shoot.banter).prompt} Follow-ups and reactions do not count toward the number of main questions.`);
     lines.push('Several actors may answer the same question.');
@@ -50,12 +50,15 @@ function pilotBlock(shoot) {
     const actors = shoot.studio !== 'characters';
     const own = actors
         ? `- The actors also share first impressions of the pilot, of their characters and of each other, and what they hope the writers will do with their characters.`
-        : `- The characters predict their own future with full conviction and in their own voice, with whatever denial, pride or lies their personalities bring: sworn enemies insist nothing will ever happen between them. Their relationships are exactly as they stand at the end of SCENES.`;
+        : `- The characters predict where they will be "when all this is over" with full conviction and in their own voice, with whatever denial, pride or lies their personalities bring: sworn enemies insist nothing will ever happen between them ("by the end I'll be on the throne and he'll be in chains"). Their relationships are exactly as they stand at the end of SCENES.`;
     return `
 
 PREDICTIONS
-- Everything beyond SCENES is unknown to everyone. They guess, theorize, argue and bet on where the story is going and how the relationships will develop.
-- Guesses are concrete, varied and grounded in details of SCENES and the setting: possible twists, secrets, betrayals, alliances, romance, rivalries, what each of them fears and hopes for.
+- Everything beyond SCENES is unknown to everyone. They guess, theorize, argue and bet on the story as a whole.
+- Think big: seasons and the finale, not the next scene or episode. Do not dwell on what happens right after SCENES.
+- The main thread is the endgame: how each of them will change, where their relationship ends up in the hypothetical finale (together, apart, enemies forever, married, one of them dead or betrayed, at war), what the final scene might look like.
+- Along the way they may name milestones as steps toward that ending: who confesses first, the first kiss, the big fight, a betrayal, a sacrifice. Milestones serve the endgame, they are not the focus.
+- Guesses are concrete, varied and grounded in details of SCENES and the setting: twists, secrets, alliances, romance, rivalries, what each of them fears and hopes for.
 - The character card, persona and lorebooks give knowledge of the world only. If they contain plans, summaries or events beyond SCENES, nobody knows those: never state them as facts. At most, someone may make a guess that happens to point that way.
 ${own}`;
 }
@@ -228,7 +231,7 @@ function charactersPart(people, mode = 'interview') {
     const premise = {
         interview: 'The roleplay story in the context was filmed as a TV series, and its characters have just watched the footage of SCENES. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about what happened in these scenes and how it was shown.',
         reaction: 'The roleplay story in the context was filmed as a TV series. Now the characters themselves — not actors — watch the footage of SCENES together, as described in FORMAT, and react to what happened and how it was shown.',
-        pilot: 'The roleplay story in the context is being filmed as a TV series, and SCENES is its pilot episode, which the characters have just watched. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about what they think will happen to them next.',
+        pilot: 'The roleplay story in the context is being filmed as a TV series, and SCENES is its pilot episode, which the characters have just watched. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about where they think all of this will lead them in the end.',
     }[mode];
     return `PREMISE
 ${premise}
