@@ -2845,6 +2845,91 @@
     }
 }
 
+/* ---------- Кнопки запуска (порт из DS Comments) ---------- */
+
+.jnk-launcher {
+    display: inline-flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    padding: 0 !important;
+    color: var(--SmartThemeBodyColor);
+    cursor: pointer;
+    user-select: none;
+    border-radius: 8px;
+    touch-action: manipulation;
+    -webkit-tap-highlight-color: transparent;
+}
+
+.jnk-fab {
+    /* Под окном Junket (9999) и под шапкой таверны (3005), но над чатом */
+    position: fixed;
+    z-index: 2999;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 36px;
+    height: 36px;
+    color: var(--SmartThemeBodyColor);
+    cursor: pointer;
+    user-select: none;
+    background: var(--SmartThemeBlurTintColor);
+    border: 1px solid var(--SmartThemeBorderColor);
+    border-radius: 50%;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+    touch-action: none;
+    -webkit-tap-highlight-color: transparent;
+    transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+@media (hover: hover) {
+    .jnk-fab:hover {
+        color: var(--SmartThemeQuoteColor);
+        background: color-mix(in srgb, var(--SmartThemeQuoteColor) 18%, var(--SmartThemeBlurTintColor));
+        border-color: color-mix(in srgb, var(--SmartThemeQuoteColor) 55%, transparent);
+    }
+}
+
+.jnk-fab:focus-visible {
+    outline: 2px solid var(--SmartThemeQuoteColor);
+    outline-offset: 2px;
+}
+
+.jnk-fab.jnk-fab-dragging {
+    cursor: grabbing !important;
+    transition: none !important;
+    will-change: left, top;
+}
+
+.jnk-launcher.jnk-generating,
+.jnk-fab.jnk-generating {
+    color: var(--SmartThemeQuoteColor);
+    animation: jnk-pulse 1.4s ease-in-out infinite;
+    will-change: transform;
+}
+
+@keyframes jnk-pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.12); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .jnk-launcher.jnk-generating,
+    .jnk-fab.jnk-generating {
+        opacity: 0.8;
+        animation: none;
+        will-change: auto;
+    }
+}
+
+/* Нет открытого чата (главная) — Junket там не работает, кнопки прячем */
+body.jnk-no-chat #jnk-launcher,
+body.jnk-no-chat .jnk-fab {
+    display: none !important;
+}
+
 /* ПК: окно пошире и фиксированной высоты, прокручивается только содержимое */
 
 @media (min-width: 1001px) {

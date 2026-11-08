@@ -48,6 +48,9 @@ export const DEFAULT_SETTINGS = Object.freeze({
     bankGenRecentCount: 30,      // сколько последних сообщений (20–50, шаг 5)
     bankGenSample: null,         // id списка-образца стиля (null — без образца)
 
+    // Кнопка запуска: 'menu' | 'bar' | 'floating' | 'both' (пункт в меню расширений есть всегда)
+    launcherMode: 'menu',
+
     // Оформление
     theme: 'magazine',           // тема интервью (themes.js)
     paper: 'day',                // бумага для Газеты, Сценария и Досье: 'day' | 'night'

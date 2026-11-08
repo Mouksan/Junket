@@ -6,6 +6,7 @@ import { ctx, getSettings, saveSettings, escapeHtml } from './store.js';
 import { LANGUAGES } from './formats.js';
 import { THEMES, PAPERS, getTheme, normalizePaper, stageClass, paperThemeLabels, DEMO_ITEM, DEMO_PERSONA } from './themes.js';
 import { renderInterviewHtml } from './render.js';
+import { LAUNCHER_MODES, launcherMode, syncLaunchers } from './launcher.js';
 
 function categoryHtml(icon, title, body, open = false) {
     return `
@@ -30,7 +31,12 @@ export function settingsPaneHtml() {
         <div class="jnk-seg" id="jnk_paper">
             ${PAPERS.map((p) => `<button type="button" class="jnk-seg-btn ${p.id === paper ? 'active' : ''}" data-paper="${p.id}">${p.label}</button>`).join('')}
         </div>
-        <div class="jnk-set-hint">Для тем: ${escapeHtml(paperThemeLabels().join(', '))}. Переключается и прямо в интервью.</div>`;
+        <div class="jnk-set-hint">Для тем: ${escapeHtml(paperThemeLabels().join(', '))}. Переключается и прямо в интервью.</div>
+        <label class="jnk-label" for="jnk_launcher">Кнопка запуска</label>
+        <select id="jnk_launcher" class="text_pole">
+            ${LAUNCHER_MODES.map((m) => `<option value="${m.id}" ${m.id === launcherMode() ? 'selected' : ''}>${escapeHtml(m.label)}</option>`).join('')}
+        </select>
+        <div class="jnk-set-hint">Пункт «Junket» в меню расширений есть всегда. Плавающую кнопку можно перетащить куда удобно; пока что-то генерируется, кнопки пульсируют.</div>`;
 
     const custom = s.promptSource === 'custom';
 
@@ -237,6 +243,11 @@ export function bindSettingsPane() {
         if (e.key !== 'Enter' && e.key !== ' ') return;
         e.preventDefault();
         pickTheme(e.target.closest('.jnk-theme-card'));
+    });
+    document.getElementById('jnk_launcher').addEventListener('change', (e) => {
+        getSettings().launcherMode = LAUNCHER_MODES.some((m) => m.id === e.target.value) ? e.target.value : 'menu';
+        saveSettings();
+        syncLaunchers();
     });
     document.getElementById('jnk_paper').addEventListener('click', (e) => {
         const btn = e.target.closest('.jnk-seg-btn');

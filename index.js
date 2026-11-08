@@ -26,6 +26,7 @@ import {
 } from './comments.js';
 import { requestModel } from './connection.js';
 import { addSettingsDrawer, settingsPaneHtml, bindSettingsPane, syncLookControls } from './settings.js';
+import { initLaunchers, syncLaunchers, setLauncherBusy } from './launcher.js';
 import { getTheme, normalizePaper, stageClass } from './themes.js';
 import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle, fullInterviewText } from './render.js';
 import {
@@ -780,6 +781,7 @@ async function onGoClick() {
         generation.controller.junketQuiet = true;
         generation.controller.abort();
         generation = null;
+        refreshBusy();
         updateGoButton();
         toastr.info('Генерация остановлена', TOAST_TITLE);
         return;
@@ -795,6 +797,7 @@ async function onGoClick() {
     const store = getChatStore();
     const controller = new AbortController();
     generation = { controller, chatId };
+    refreshBusy();
     let savedId = null;
     updateGoButton();
 
@@ -847,6 +850,7 @@ async function onGoClick() {
         }
     } finally {
         if (generation?.controller === controller) generation = null;
+        refreshBusy();
         if (isOpen()) {
             updateGoButton();
             if (currentChatId() === chatId) {
@@ -984,6 +988,7 @@ async function onBankGenClick() {
     const s = getSettings();
     const controller = new AbortController();
     bankGen = { controller, chatId };
+    refreshBusy();
     renderBankEditor();
 
     try {
@@ -1017,6 +1022,7 @@ async function onBankGenClick() {
         }
     } finally {
         if (bankGen?.controller === controller) bankGen = null;
+        refreshBusy();
         if (bankEditorEl && !bankEditorEl.hidden) renderBankEditor();
     }
 }
@@ -1437,6 +1443,7 @@ async function onAudienceClick(itemId) {
         audienceGen.controller.abort();
         const stopped = audienceGen.itemId;
         audienceGen = null;
+        refreshBusy();
         toastr.info('Генерация остановлена', TOAST_TITLE);
         refreshViewer(stopped);
         return;
@@ -1455,6 +1462,7 @@ async function onAudienceClick(itemId) {
     const chatId = currentChatId();
     const controller = new AbortController();
     audienceGen = { controller, chatId, itemId };
+    refreshBusy();
     audienceOpenFor = itemId;
     refreshViewer(itemId);
 
@@ -1498,6 +1506,7 @@ async function onAudienceClick(itemId) {
         }
     } finally {
         if (audienceGen?.controller === controller) audienceGen = null;
+        refreshBusy();
         refreshViewer(itemId);
     }
 }
@@ -1562,6 +1571,7 @@ async function onFeedClick(itemId) {
         feedGen.controller.abort();
         const stopped = feedGen.itemId;
         feedGen = null;
+        refreshBusy();
         toastr.info('Генерация остановлена', TOAST_TITLE);
         refreshViewer(stopped);
         return;
@@ -1579,6 +1589,7 @@ async function onFeedClick(itemId) {
     const chatId = currentChatId();
     const controller = new AbortController();
     feedGen = { controller, chatId, itemId };
+    refreshBusy();
     feedOpenFor = itemId;
     refreshViewer(itemId);
 
@@ -1621,6 +1632,7 @@ async function onFeedClick(itemId) {
         }
     } finally {
         if (feedGen?.controller === controller) feedGen = null;
+        refreshBusy();
         refreshViewer(itemId);
     }
 }
@@ -1708,6 +1720,11 @@ async function deleteInterview(id) {
 
 // ---------- Встраивание в таверну ----------
 
+/** Кнопки запуска пульсируют, пока идёт любая генерация. */
+function refreshBusy() {
+    setLauncherBusy(Boolean(generation || audienceGen || feedGen || bankGen));
+}
+
 function addWandButton() {
     const menu = document.getElementById('extensionsMenu');
     if (!menu || document.getElementById('jnk-wand')) return;
@@ -1727,24 +1744,28 @@ function onChatChanged() {
         generation.controller.junketQuiet = true;
         generation.controller.abort();
         generation = null;
+        refreshBusy();
         toastr.info('Генерация остановлена: сменился чат', TOAST_TITLE);
     }
     if (audienceGen) {
         audienceGen.controller.junketQuiet = true;
         audienceGen.controller.abort();
         audienceGen = null;
+        refreshBusy();
         toastr.info('Вопросы из зала остановлены: сменился чат', TOAST_TITLE);
     }
     if (feedGen) {
         feedGen.controller.junketQuiet = true;
         feedGen.controller.abort();
         feedGen = null;
+        refreshBusy();
         toastr.info('Лента комментариев остановлена: сменился чат', TOAST_TITLE);
     }
     if (bankGen) {
         bankGen.controller.junketQuiet = true;
         bankGen.controller.abort();
         bankGen = null;
+        refreshBusy();
         toastr.info('Сочинение вопросов остановлено: сменился чат', TOAST_TITLE);
     }
     audienceOpenFor = null;
@@ -1752,6 +1773,8 @@ function onChatChanged() {
     resetLoreTokenCache();
     archiveOpenId = null;
     if (bankEditorEl) bankEditorEl.hidden = true;
+    // Кнопки запуска прячутся, когда чата нет (главная страница)
+    syncLaunchers();
     // Окно открыто — перерисовываем под новый чат, иначе ничего не делаем
     if (isOpen()) renderAll();
 }
@@ -1760,6 +1783,7 @@ jQuery(async () => {
     getSettings();
     addSettingsDrawer(() => openWindow());
     addWandButton();
+    initLaunchers(() => openWindow());
 
     const { eventSource, event_types } = ctx();
     eventSource.on(event_types.CHAT_CHANGED, onChatChanged);
