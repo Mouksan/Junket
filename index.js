@@ -125,8 +125,28 @@ function isOpen() {
     return Boolean(overlayEl && overlayEl.classList.contains('jnk-open'));
 }
 
+/**
+ * Высота видимой части экрана → --jnk-vh у подложки. На телефоне это надёжнее dvh:
+ * учитывает панель браузера и открытую клавиатуру.
+ */
+function syncViewportHeight() {
+    if (!overlayEl) return;
+    const height = window.visualViewport?.height || window.innerHeight;
+    if (height > 0) overlayEl.style.setProperty('--jnk-vh', `${Math.round(height)}px`);
+}
+
+let viewportBound = false;
+function bindViewport() {
+    if (viewportBound) return;
+    viewportBound = true;
+    window.addEventListener('resize', syncViewportHeight);
+    window.visualViewport?.addEventListener('resize', syncViewportHeight);
+}
+
 function openWindow(tab) {
     if (!overlayEl) overlayEl = buildWindow();
+    syncViewportHeight();
+    bindViewport();
     if (tab) activeTab = tab;
     settingsOpen = false;
     overlayEl.classList.add('jnk-open');
@@ -1327,13 +1347,13 @@ function renderArchiveViewer(pane, item) {
     const paper = normalizePaper(s.paper);
     pane.innerHTML = `
         <div class="jnk-viewer-bar">
-            <button class="jnk-btn jnk-back" type="button"><i class="fa-solid fa-arrow-left"></i> Все интервью</button>
+            <button class="jnk-btn jnk-back" type="button" title="Все интервью"><i class="fa-solid fa-arrow-left"></i><span class="jnk-btn-label"> Все интервью</span></button>
             <div class="jnk-viewer-actions">
                 ${theme.paper ? paperButtonHtml(paper) : ''}
                 <button class="jnk-btn jnk-fav ${item.favorite ? 'jnk-fav-on' : ''}" type="button" title="${item.favorite ? 'Убрать из избранного' : 'В избранное'}">${item.favorite ? '★' : '☆'}</button>
-                ${item.studio === 'characters' || !String(item.text || '').trim() ? '' : '<button class="jnk-btn jnk-pin" type="button">📌 Закрепить каст</button>'}
-                <button class="jnk-btn jnk-copy" type="button"><i class="fa-regular fa-copy"></i> Скопировать</button>
-                <button class="jnk-btn jnk-btn-danger jnk-remove" type="button"><i class="fa-solid fa-trash-can"></i> Удалить</button>
+                ${item.studio === 'characters' || !String(item.text || '').trim() ? '' : '<button class="jnk-btn jnk-pin" type="button" title="Закрепить каст">📌<span class="jnk-btn-label"> Закрепить каст</span></button>'}
+                <button class="jnk-btn jnk-copy" type="button" title="Скопировать"><i class="fa-regular fa-copy"></i><span class="jnk-btn-label"> Скопировать</span></button>
+                <button class="jnk-btn jnk-btn-danger jnk-remove" type="button" title="Удалить"><i class="fa-solid fa-trash-can"></i><span class="jnk-btn-label"> Удалить</span></button>
             </div>
         </div>
         <div class="${stageClass(theme.id, paper)}">

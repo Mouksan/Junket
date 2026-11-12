@@ -3,13 +3,23 @@
 @import url('./fonts/fonts.css');
 
 .jnk-overlay {
+    /* Не inset: 0! В CSS таверны у <html> стоит translateZ(0), и мобильный Firefox
+       честно делает <html> опорой для position: fixed. А <html> на телефоне нулевой
+       высоты (body там fixed), так что растянутое окно уезжало за верх экрана.
+       Поэтому размеры задаём явно, от экрана; --jnk-vh ставит index.js по visualViewport. */
     position: fixed;
-    inset: 0;
+    top: 0;
+    left: 0;
     z-index: 9999;
+    box-sizing: border-box;
     display: none;
-    align-items: center;
+    align-items: flex-start;
     justify-content: center;
+    width: 100vw;
+    height: 100vh;
+    height: var(--jnk-vh, 100dvh);
     padding: 16px;
+    overflow-y: auto;
     background: rgba(0, 0, 0, 0.45);
 }
 
@@ -21,8 +31,10 @@
     position: relative;
     display: flex;
     flex-direction: column;
+    /* margin: auto — по центру, когда влезает, и от верхнего края, когда нет */
+    margin: auto 0;
     width: min(760px, 100%);
-    max-height: calc(100dvh - 32px);
+    max-height: 100%;
     overflow: hidden;
     color: var(--SmartThemeBodyColor);
     background: var(--SmartThemeBlurTintColor);
@@ -36,6 +48,7 @@
 
 .jnk-header {
     display: flex;
+    flex-shrink: 0;
     align-items: center;
     gap: 12px;
     padding: 12px 14px 8px;
@@ -91,9 +104,22 @@
 
 .jnk-tabs {
     display: flex;
+    /* С overflow полоска иначе сжимается, когда содержимое длинное */
+    flex-shrink: 0;
     gap: 6px;
     padding: 0 14px 10px;
+    overflow-x: auto;
+    scrollbar-width: none;
     border-bottom: 1px solid var(--SmartThemeBorderColor);
+}
+
+.jnk-tabs::-webkit-scrollbar {
+    display: none;
+}
+
+.jnk-tabs > * {
+    flex-shrink: 0;
+    white-space: nowrap;
 }
 
 .jnk-tab {
@@ -608,10 +634,31 @@
         grid-template-rows: auto 1fr;
     }
 
+    /* Списки — одной лентой, листается вбок */
     .jnk-bank-lists {
         flex-direction: row;
-        flex-wrap: wrap;
-        max-height: 120px;
+        flex-wrap: nowrap;
+        padding: 0 0 6px;
+        overflow-x: auto;
+        overflow-y: hidden;
+    }
+
+    .jnk-bank-lists > * {
+        flex-shrink: 0;
+        margin-top: 0;
+        white-space: nowrap;
+    }
+
+    /* Во весь экран: подложка плотная, чтобы окно под банком не просвечивало */
+    .jnk-modal {
+        background: var(--SmartThemeBlurTintColor);
+        backdrop-filter: blur(var(--SmartThemeBlurStrength, 10px));
+    }
+
+    .jnk-modal-card {
+        width: 100%;
+        border: none;
+        box-shadow: none;
     }
 }
 
@@ -2935,22 +2982,54 @@ body.jnk-no-chat .jnk-fab {
 @media (min-width: 1001px) {
     .jnk-window {
         width: 70vw;
-        height: 82vh;
-        max-height: 82vh;
+        height: min(82vh, 100%);
+        max-height: 100%;
     }
 }
 
-/* Телефон */
+/* Телефон: окно во весь экран, с учётом чёлки и полоски жестов */
 
 @media (max-width: 600px) {
     .jnk-overlay {
-        padding: 0;
+        padding: env(safe-area-inset-top, 0) 0 env(safe-area-inset-bottom, 0);
+    }
+
+    /* Крестик и шестерёнка — под палец */
+    .jnk-close,
+    .jnk-gear {
+        width: 40px;
+        height: 40px;
+        font-size: 1.15em;
+    }
+
+    .jnk-header {
+        gap: 8px;
+        padding: 8px 8px 6px 14px;
+    }
+
+    /* Кнопки над интервью — одними иконками, в одну строку */
+    .jnk-viewer-bar .jnk-btn-label {
+        display: none;
+    }
+
+    .jnk-viewer-bar {
+        flex-wrap: nowrap;
+    }
+
+    .jnk-viewer-actions {
+        flex-wrap: nowrap;
+    }
+
+    .jnk-viewer-bar .jnk-btn {
+        min-width: 40px;
+        min-height: 36px;
     }
 
     .jnk-window {
         width: 100%;
-        max-height: 100dvh;
-        height: 100dvh;
+        height: 100%;
+        max-height: 100%;
+        border: none;
         border-radius: 0;
     }
 }
