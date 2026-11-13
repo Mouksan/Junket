@@ -152,6 +152,9 @@ export function stripPreamble(text) {
     out = out.replace(/<(think|thinking|reasoning|thought|rp_preflight)>[\s\S]*?<\/\1>/gi, '').trim();
     out = out.replace(/^[\s\S]*?<\/(?:think|thinking|reasoning|thought|rp_preflight)>/i, '').trim();
     out = out.replace(/^```[a-z]*\s*\n?/i, '').replace(/\n?```\s*$/, '').trim();
+    // Скрытые HTML-комментарии (<!-- HT … --> от Hearthtide и т. п.) — модель иногда дописывает их по инерции.
+    // Последнее правило — для незакрытого комментария в самом конце ответа.
+    out = out.replace(/<!--[\s\S]*?-->/g, '').replace(/<!--[\s\S]*$/, '').replace(/[ \t]+\n/g, '\n').trim();
     // Всё, что до первой реплики интервью, — вступление модели.
     const firstTag = out.search(/^\s*\[(?:TITLE|Q|A|F|M)\b/im);
     if (firstTag > 0) out = out.slice(firstTag).trim();
