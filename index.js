@@ -133,6 +133,21 @@ function syncViewportHeight() {
     if (!overlayEl) return;
     const height = window.visualViewport?.height || window.innerHeight;
     if (height > 0) overlayEl.style.setProperty('--jnk-vh', `${Math.round(height)}px`);
+    keepOverlayOnScreen();
+}
+
+/**
+ * Страховка: если страницу под окном что-то прокрутило (в мобильном Firefox подложка
+ * привязана к странице), сдвигаем подложку обратно, чтобы она снова начиналась с верха экрана.
+ */
+function keepOverlayOnScreen() {
+    if (!isOpen()) return;
+    // Подложку саму по себе тоже могли прокрутить (scrollIntoView умеет и overflow: hidden)
+    if (overlayEl.scrollTop || overlayEl.scrollLeft) overlayEl.scrollTo(0, 0);
+    const current = parseFloat(overlayEl.style.getPropertyValue('--jnk-top')) || 0;
+    const drift = overlayEl.getBoundingClientRect().top;
+    if (Math.abs(drift) < 1) return;
+    overlayEl.style.setProperty('--jnk-top', `${Math.round(current - drift)}px`);
 }
 
 let viewportBound = false;
@@ -141,6 +156,8 @@ function bindViewport() {
     viewportBound = true;
     window.addEventListener('resize', syncViewportHeight);
     window.visualViewport?.addEventListener('resize', syncViewportHeight);
+    window.addEventListener('scroll', keepOverlayOnScreen, { passive: true });
+    overlayEl?.addEventListener('scroll', keepOverlayOnScreen, { passive: true });
 }
 
 function openWindow(tab) {
@@ -1222,7 +1239,7 @@ function renderCast() {
         c.npcs.push(newNpc());
         saveCast(c);
         renderCast();
-        overlayEl.querySelector('[data-pane="cast"] [data-npc]:last-of-type [data-field="name"]')?.focus();
+        overlayEl.querySelector('[data-pane="cast"] [data-npc]:last-of-type [data-field="name"]')?.focus({ preventScroll: true });
     });
     pane.querySelectorAll('.jnk-npc-delete').forEach((btn) => {
         btn.addEventListener('click', () => {
@@ -1307,7 +1324,9 @@ function renderArchive() {
         const open = () => {
             archiveOpenId = row.dataset.id;
             renderArchive();
-            pane.scrollIntoView?.({ block: 'start' });
+            // Только внутри окна! scrollIntoView крутил и страницу таверны под ним,
+            // а в мобильном Firefox окно уезжало вместе с ней за верх экрана
+            overlayEl?.querySelector('.jnk-body')?.scrollTo?.(0, 0);
         };
         row.addEventListener('click', (e) => {
             if (e.target.closest('.jnk-delete')) return;
