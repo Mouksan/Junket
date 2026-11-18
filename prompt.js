@@ -102,14 +102,36 @@ This is a live conversation, not a series of essays.
     return `${base}${extra}${wild}`;
 }
 
-// Мат: «Прайм-тайм» — запикан, формальный формат — нет, неформальный — да
+// Кто и сколько матерится — по характеру (у актёров — по характеру самого актёра)
+function swearByCharacter(shoot) {
+    const actors = shoot.studio !== 'characters';
+    return `Who swears, and how often, depends on who they are. Coarse personalities and backgrounds (soldiers, criminals, athletes, working-class, hot-tempered or brash people) swear often and naturally; refined, reserved or well-mannered people swear rarely, only when genuinely provoked or overwhelmed. Consider personality, social class, occupation, region, age and the heat of the moment: heated arguments and embarrassing moments push it up, calm talk brings it down. No filler swearing: every swear word should feel earned.${actors ? " For actors this follows the actor's own off-camera personality, not the character they play." : ''}`;
+}
+
+// Мат: «Прайм-тайм» — запикан, формальный формат — нет, неформальный — да, но по характеру
 function swearingBlock(shoot, language) {
-    if (shoot.vibes.rating === 'prime') return '';   // правило про [BLEEP] уже в вайбе рейтинга
     if (getFormality(shoot) === 'formal') {
         return '\n\nSWEARING\nNo swearing at all: this is a formal setting, even if explicit topics are allowed. Do not use [BLEEP].';
     }
-    const profanity = language === 'Russian' ? 'strong Russian profanity (мат)' : `strong ${language} profanity`;
-    return `\n\nSWEARING\nThis is an informal setting. Use real ${profanity} naturally and more than once, the way people actually talk off camera. Not euphemisms. Never censor, bleep or mask words: no [BLEEP], no letters replaced with symbols or dashes (write the word in full, not like х*й).`;
+    if (shoot.vibes.rating === 'prime') {
+        // Само правило про [BLEEP] — в вайбе рейтинга; тут — кто вообще стал бы ругаться
+        return `\n\nSWEARING\n${swearByCharacter(shoot)} Every swear word is bleeped as [BLEEP], as the rating says.`;
+    }
+    const profanity = language === 'Russian' ? 'real Russian profanity (мат)' : `real ${language} profanity`;
+    return `\n\nSWEARING\nThis is an informal setting, so ${profanity} is allowed. ${swearByCharacter(shoot)}
+When someone does swear, write the word in full, not a euphemism. Never censor, bleep or mask words: no [BLEEP], no letters replaced with symbols or dashes (write the word in full, not like х*й).`;
+}
+
+// Живой интервьюер: без «вопрос первый», мостики между темами (в «Реакции» интервьюера нет)
+function interviewerBlock(shoot) {
+    if (isReaction(shoot)) return '';
+    return `
+
+THE INTERVIEWER
+- The interviewer is a real person, not a script. They never announce or number questions: no "Question one", "Next question", "Moving on to question three".
+- Each question grows out of what was just said: pick up an answer, a joke or a slip and use it as a bridge to the next topic ("Speaking of jealousy…", "Wait, go back — you said…"). The conversation flows from topic to topic.
+- Not every interviewer turn is a question: reactions, teasing, comments and short follow-ups are welcome.
+- Stage directions for the interviewer are rare and varied; never open every turn with the same gesture.`;
 }
 
 // Банк вопросов: «именно эти» — случайные N из списка (не хватает — досочинить), «как примеры» — образец тона
@@ -241,6 +263,7 @@ ${whoCharacters(people)}
 
 THE CHARACTERS
 - They speak in the first person as themselves, with the personalities, speech manners, knowledge and relationships they have in the story at the end of SCENES.
+- Their relationship, intimacy and physical closeness with each other are exactly as they stand at the end of SCENES, not where the story may go later. If they have not even held hands yet, they do not touch, sit close or flirt openly now; any tension shows in looks, distance and words. Stage directions and body language match that level.
 - They react to the footage: comment on what they did and felt, argue about how they were portrayed, tease, defend themselves, confront each other.
 - They know they are in a show (the fourth wall is broken) but stay fully themselves. There are no actors and no talk about filming technique.
 - Ground everything in concrete moments from SCENES: specific lines, actions, details. Avoid generic answers that could fit any story.
@@ -281,7 +304,7 @@ ${actors ? actorsPart(people, language, modeOf(shoot), otherCastBlock(shoot, cas
 FORMAT
 ${reaction ? reactionFormatBlock(shoot) : formatBlock(shoot)}${pilotBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${bankBlock(shoot)}${reaction ? topicsBlock(shoot) : ''}${wishesBlock(shoot)}
 
-${rhythmBlock(shoot)}
+${rhythmBlock(shoot)}${interviewerBlock(shoot)}
 
 OUTPUT MARKUP (strict)
 The first line is the headline:
@@ -355,7 +378,7 @@ AUDIENCE SEGMENT
 - The same people answer as in INTERVIEW SO FAR: the same names, personalities, relationships and running jokes. Do not repeat jokes or stories that were already told.
 - Several people may answer one question; follow-ups and short reactions are welcome. The host may close with one short line at the end.
 
-${rhythmBlock(shoot)}
+${rhythmBlock(shoot)}${interviewerBlock(shoot)}
 
 OUTPUT MARKUP (strict)
 Every turn starts on a new line with a tag:

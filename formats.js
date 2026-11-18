@@ -140,7 +140,7 @@ export const BANTER = [
     {
         id: 'tight',
         label: 'По делу',
-        prompt: 'Banter: none. Question, answers, next question. No follow-ups.',
+        prompt: 'Banter: none. No follow-ups: after the answers the interviewer moves on to the next question, but with a natural bridge, never a bare "next question".',
         reaction: 'Banter: minimal. Short reactions at each pause, then they press play again.',
     },
     {
