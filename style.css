@@ -1295,7 +1295,8 @@
 
 /* Вопросы из зала: панель под интервью */
 
-.jnk-audience {
+.jnk-audience,
+.jnk-bottom-row {
     display: flex;
     flex-direction: column;
     gap: 10px;

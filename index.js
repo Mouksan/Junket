@@ -1388,7 +1388,7 @@ function renderArchiveViewer(pane, item) {
         </div>
         ${String(item.text || '').trim() && !isReaction(item.format)
         ? audiencePanelHtml(item)
-        : `<div class="jnk-audience"><div class="jnk-extras-buttons">${toTopButtonHtml()}</div></div>`}`;
+        : `<div class="jnk-bottom-row"><div class="jnk-extras-buttons">${toTopButtonHtml()}</div></div>`}`;
 
     pane.querySelector('.jnk-back').addEventListener('click', () => {
         archiveOpenId = null;
