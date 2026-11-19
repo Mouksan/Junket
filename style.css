@@ -2893,6 +2893,17 @@
     }
 }
 
+/* ---------- Кнопки-иконки над интервью ---------- */
+
+.jnk-btn.jnk-icon-only {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 36px;
+    min-height: 34px;
+    padding: 4px 10px;
+}
+
 /* ---------- Редактирование (✎) ---------- */
 
 .jnk-viewer-bar > .jnk-settings-heading {

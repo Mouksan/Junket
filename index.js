@@ -1347,7 +1347,7 @@ function renderArchive() {
 
 function paperButtonHtml(paper) {
     const night = paper === 'night';
-    return `<button class="jnk-btn jnk-paper-btn" type="button" title="${night ? 'Дневная бумага' : 'Ночная бумага'}">${night ? '☀' : '🌙'}</button>`;
+    return `<button class="jnk-btn jnk-icon-only jnk-paper-btn" type="button" title="${night ? 'Дневная бумага' : 'Ночная бумага'}">${night ? '☀' : '🌙'}</button>`;
 }
 
 /** ☀/🌙 в панели интервью: меняем классы на месте, без перерисовки. */
@@ -1372,14 +1372,14 @@ function renderArchiveViewer(pane, item) {
     const paper = normalizePaper(s.paper);
     pane.innerHTML = `
         <div class="jnk-viewer-bar">
-            <button class="jnk-btn jnk-back" type="button" title="Все интервью"><i class="fa-solid fa-arrow-left"></i><span class="jnk-btn-label"> Все интервью</span></button>
+            <button class="jnk-btn jnk-icon-only jnk-back" type="button" title="Все интервью" aria-label="Все интервью"><i class="fa-solid fa-arrow-left"></i></button>
             <div class="jnk-viewer-actions">
                 ${theme.paper ? paperButtonHtml(paper) : ''}
-                <button class="jnk-btn jnk-fav ${item.favorite ? 'jnk-fav-on' : ''}" type="button" title="${item.favorite ? 'Убрать из избранного' : 'В избранное'}">${item.favorite ? '★' : '☆'}</button>
-                ${item.studio === 'characters' || !String(item.text || '').trim() ? '' : '<button class="jnk-btn jnk-pin" type="button" title="Закрепить каст">📌<span class="jnk-btn-label"> Закрепить каст</span></button>'}
-                ${String(item.text || '').trim() ? '<button class="jnk-btn jnk-edit" type="button" title="Редактировать">✎<span class="jnk-btn-label"> Редактировать</span></button>' : ''}
-                <button class="jnk-btn jnk-copy" type="button" title="Скопировать"><i class="fa-regular fa-copy"></i><span class="jnk-btn-label"> Скопировать</span></button>
-                <button class="jnk-btn jnk-btn-danger jnk-remove" type="button" title="Удалить"><i class="fa-solid fa-trash-can"></i><span class="jnk-btn-label"> Удалить</span></button>
+                <button class="jnk-btn jnk-icon-only jnk-fav ${item.favorite ? 'jnk-fav-on' : ''}" type="button" title="${item.favorite ? 'Убрать из избранного' : 'В избранное'}">${item.favorite ? '★' : '☆'}</button>
+                ${item.studio === 'characters' || !String(item.text || '').trim() ? '' : '<button class="jnk-btn jnk-icon-only jnk-pin" type="button" title="Закрепить каст" aria-label="Закрепить каст"><i class="fa-solid fa-thumbtack"></i></button>'}
+                ${String(item.text || '').trim() ? '<button class="jnk-btn jnk-icon-only jnk-edit" type="button" title="Редактировать" aria-label="Редактировать"><i class="fa-solid fa-pen"></i></button>' : ''}
+                <button class="jnk-btn jnk-icon-only jnk-copy" type="button" title="Скопировать" aria-label="Скопировать"><i class="fa-regular fa-copy"></i></button>
+                <button class="jnk-btn jnk-icon-only jnk-btn-danger jnk-remove" type="button" title="Удалить" aria-label="Удалить"><i class="fa-solid fa-trash-can"></i></button>
             </div>
         </div>
         <div class="${stageClass(theme.id, paper)}">
