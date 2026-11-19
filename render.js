@@ -8,7 +8,7 @@
 //   [M: 545] подпись момента («Реакция на сцену»: остановка на сообщении #545)
 // Внутри реплик: *ремарка*, **жирное**, абзацы через пустую строку.
 
-import { ctx, escapeHtml, formatDate } from './store.js';
+import { ctx, escapeHtml, formatDate, stripModelJunk } from './store.js';
 import { formatLabel } from './formats.js';
 import { getTheme, normalizePaper } from './themes.js';
 import { hashHue } from './comments.js';
@@ -29,7 +29,8 @@ export function parseInterview(text) {
     const result = { title: '', turns: [] };
     let current = null;
 
-    for (const line of String(text || '').replace(/\r\n?/g, '\n').split('\n')) {
+    // stripModelJunk — и для уже сохранённых интервью, где хвост успел попасть в архив
+    for (const line of stripModelJunk(String(text || '').replace(/\r\n?/g, '\n')).split('\n')) {
         const m = line.match(TAG_RE);
         if (m) {
             const tag = m[1].toUpperCase();
@@ -294,7 +295,7 @@ export function renderInterviewHtml(item, opts = {}) {
     const parsed = parseInterview(item.text);
     if (!parsed.turns.length) {
         // Модель не выдала разметку — показываем как есть, чтобы ничего не потерялось
-        return `<article class="jnk-iv">${head}<div class="jnk-iv-plain">${bodyHtml(item.text)}</div></article>`;
+        return `<article class="jnk-iv">${head}<div class="jnk-iv-plain">${bodyHtml(stripModelJunk(item.text))}</div></article>`;
     }
 
     const cast = { ...buildCastMap(), unknown: new Map() };   // цвета общие для интервью и раундов
@@ -303,7 +304,7 @@ export function renderInterviewHtml(item, opts = {}) {
         const roundTurns = parseInterview(round.text).turns;
         const body = roundTurns.length
             ? `<div class="jnk-iv-turns">${turnsHtml(roundTurns, cast, round.ownNick, env)}</div>`
-            : `<div class="jnk-iv-plain">${bodyHtml(round.text)}</div>`;
+            : `<div class="jnk-iv-plain">${bodyHtml(stripModelJunk(round.text))}</div>`;
         return `
             <section class="jnk-round" data-round="${escapeHtml(round.id)}">
                 <div class="jnk-round-head">
@@ -609,7 +610,7 @@ export function interviewPlainText(item) {
 
 function plainTurns(text) {
     const parsed = parseInterview(text);
-    if (!parsed.turns.length) return String(text || '').trim();
+    if (!parsed.turns.length) return stripModelJunk(text);
     return parsed.turns.map((turn) => {
         if (turn.kind === 'm') return `— ⏸ ${turn.actor ? `#${turn.actor}` : ''}${turn.body ? `: ${turn.body}` : ''} —`;
         const who = turn.kind === 'q' ? 'Интервьюер'
@@ -621,9 +622,9 @@ function plainTurns(text) {
 
 /** Интервью вместе с раундами — сырой текст для модели и для «Закрепить каст». */
 export function fullInterviewText(item) {
-    const parts = [String(item.text || '').trim()];
+    const parts = [stripModelJunk(item.text)];
     for (const round of item.rounds || []) {
-        if (String(round?.text || '').trim()) parts.push(String(round.text).trim());
+        if (String(round?.text || '').trim()) parts.push(stripModelJunk(round.text));
     }
     return parts.join('\n\n');
 }

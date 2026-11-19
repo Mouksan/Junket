@@ -2893,6 +2893,53 @@
     }
 }
 
+/* ---------- Редактирование (✎) ---------- */
+
+.jnk-viewer-bar > .jnk-settings-heading {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.jnk-edit {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.jnk-edit .jnk-cast-field {
+    flex: 0 0 auto;
+}
+
+.jnk-edit-text {
+    min-height: 55vh;
+    font-family: var(--monoFontFamily, ui-monospace, 'Cascadia Mono', Consolas, monospace);
+    font-size: 0.9em;
+    line-height: 1.5;
+    resize: vertical;
+    white-space: pre-wrap;
+}
+
+.jnk-edit-round {
+    min-height: 25vh;
+}
+
+.jnk-edit-help {
+    font-size: 0.85em;
+    opacity: 0.85;
+}
+
+.jnk-edit-help summary {
+    cursor: pointer;
+}
+
+.jnk-edit-help ul {
+    margin: 6px 0 0;
+    padding-left: 18px;
+    line-height: 1.6;
+}
+
 /* ---------- Кнопки запуска (порт из DS Comments) ---------- */
 
 .jnk-launcher {

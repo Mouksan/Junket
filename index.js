@@ -12,7 +12,7 @@
 
 import {
     ctx, getSettings, saveSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
-    currentChatId, getChatStore, saveChatStore, saveChatStoreDebounced, TOAST_TITLE,
+    currentChatId, getChatStore, saveChatStore, saveChatStoreDebounced, TOAST_TITLE, stripModelJunk,
 } from './store.js';
 import {
     ACTIVE_KIND_LABELS, getLorebookList, resolveLoreSelection, getSourceFlags, storeSources,
@@ -1273,6 +1273,7 @@ function onCastInput(e) {
 // ---------- Архив ----------
 
 let archiveOpenId = null;   // какое интервью открыто в архиве (null — список)
+let archiveEditId = null;   // какое интервью сейчас редактируется (✎)
 
 function renderArchive() {
     if (!overlayEl) return;
@@ -1285,6 +1286,11 @@ function renderArchive() {
     }
 
     const opened = archiveOpenId ? store.interviews.find((item) => item.id === archiveOpenId) : null;
+    if (opened && archiveEditId === opened.id) {
+        renderArchiveEditor(pane, opened);
+        return;
+    }
+    archiveEditId = null;
     if (opened) {
         renderArchiveViewer(pane, opened);
         return;
@@ -1371,6 +1377,7 @@ function renderArchiveViewer(pane, item) {
                 ${theme.paper ? paperButtonHtml(paper) : ''}
                 <button class="jnk-btn jnk-fav ${item.favorite ? 'jnk-fav-on' : ''}" type="button" title="${item.favorite ? 'Убрать из избранного' : 'В избранное'}">${item.favorite ? '★' : '☆'}</button>
                 ${item.studio === 'characters' || !String(item.text || '').trim() ? '' : '<button class="jnk-btn jnk-pin" type="button" title="Закрепить каст">📌<span class="jnk-btn-label"> Закрепить каст</span></button>'}
+                ${String(item.text || '').trim() ? '<button class="jnk-btn jnk-edit" type="button" title="Редактировать">✎<span class="jnk-btn-label"> Редактировать</span></button>' : ''}
                 <button class="jnk-btn jnk-copy" type="button" title="Скопировать"><i class="fa-regular fa-copy"></i><span class="jnk-btn-label"> Скопировать</span></button>
                 <button class="jnk-btn jnk-btn-danger jnk-remove" type="button" title="Удалить"><i class="fa-solid fa-trash-can"></i><span class="jnk-btn-label"> Удалить</span></button>
             </div>
@@ -1392,6 +1399,11 @@ function renderArchiveViewer(pane, item) {
         else toastr.error('Не получилось скопировать', TOAST_TITLE);
     });
     pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
+    pane.querySelector('.jnk-edit')?.addEventListener('click', () => {
+        archiveEditId = item.id;
+        renderArchive();
+        overlayEl?.querySelector('.jnk-body')?.scrollTo?.(0, 0);
+    });
     pane.querySelector('.jnk-paper-btn')?.addEventListener('click', () => togglePaper(pane));
     pane.querySelector('.jnk-pin')?.addEventListener('click', () => pinCast(item));
     pane.querySelector('.jnk-fav').addEventListener('click', (e) => toggleFavorite(item.id, e.currentTarget));
@@ -1401,6 +1413,85 @@ function renderArchiveViewer(pane, item) {
     });
     bindAudiencePanel(pane, item);
     bindFeedPanel(pane, item);
+}
+
+// ---------- Редактирование (✎): сырой текст с разметкой ----------
+
+/** Текст интервью для правки: без строки [TITLE] (заголовок — отдельным полем) и без мусора модели. */
+function editableText(text) {
+    return stripModelJunk(text)
+        .split('\n')
+        .filter((line) => !/^\s*\[TITLE\b/i.test(line))
+        .join('\n')
+        .trim();
+}
+
+function renderArchiveEditor(pane, item) {
+    const rounds = (item.rounds || []).filter((r) => String(r?.text || '').trim());
+    pane.innerHTML = `
+        <div class="jnk-viewer-bar">
+            <span class="jnk-settings-heading">✎ Редактирование</span>
+            <div class="jnk-viewer-actions">
+                <button class="jnk-btn jnk-edit-cancel" type="button">Отмена</button>
+                <button class="jnk-btn jnk-go jnk-edit-save" type="button">Сохранить</button>
+            </div>
+        </div>
+        <div class="jnk-edit">
+            <label class="jnk-cast-field">
+                <span>Заголовок</span>
+                <input class="text_pole jnk-edit-title" type="text" value="${escapeHtml(item.title || defaultTitle(item.range))}">
+            </label>
+            <label class="jnk-cast-field">
+                <span>${isReaction(item.format) ? 'Реакция' : 'Интервью'}</span>
+                <textarea class="text_pole jnk-edit-text" spellcheck="false">${escapeHtml(editableText(item.text))}</textarea>
+            </label>
+            <details class="jnk-edit-help">
+                <summary>Шпаргалка по разметке</summary>
+                <ul>
+                    <li><code>[Q] …</code> — вопрос или реплика интервьюера</li>
+                    <li><code>[A: Актёр (Персонаж)] …</code> — ответ; в скобках имя как в карточке</li>
+                    <li><code>[F: @ник] …</code> — вопрос из зала</li>
+                    <li><code>[M: 541] подпись</code> — момент в «Реакции на сцену»</li>
+                    <li><code>*ремарка*</code>, <code>**жирное**</code>, <code>[BLEEP]</code> — плашка цензуры</li>
+                    <li>Каждая реплика начинается с тега на новой строке, абзацы — через пустую строку.</li>
+                </ul>
+            </details>
+            ${rounds.map((round, i) => `
+                <label class="jnk-cast-field">
+                    <span>🎤 Вопросы из зала${i > 0 ? ` · раунд ${i + 1}` : ''}</span>
+                    <textarea class="text_pole jnk-edit-text jnk-edit-round" data-round="${escapeHtml(round.id)}" spellcheck="false">${escapeHtml(stripModelJunk(round.text))}</textarea>
+                </label>`).join('')}
+            <div class="jnk-hint">Пустой раунд при сохранении удалится. Лента фандома не редактируется — лишнюю пачку можно удалить корзиной.</div>
+        </div>`;
+
+    pane.querySelector('.jnk-edit-cancel').addEventListener('click', () => {
+        archiveEditId = null;
+        renderArchive();
+    });
+    pane.querySelector('.jnk-edit-save').addEventListener('click', () => saveArchiveEdit(pane, item.id));
+}
+
+async function saveArchiveEdit(pane, id) {
+    const store = getChatStore();
+    const item = store?.interviews.find((x) => x.id === id);
+    if (!item) return;
+    const body = pane.querySelector('.jnk-edit-text:not(.jnk-edit-round)').value.replace(/\r\n?/g, '\n').trim();
+    if (!body) {
+        toastr.warning('Текст пустой — если интервью не нужно, удали его корзиной', TOAST_TITLE);
+        return;
+    }
+    const title = pane.querySelector('.jnk-edit-title').value.trim() || defaultTitle(item.range);
+    item.title = title;
+    // [TITLE] держим в тексте — его видят «Вопросы из зала» и лента фандома
+    item.text = `[TITLE] ${title}\n${body}`;
+    const edited = new Map([...pane.querySelectorAll('.jnk-edit-round')].map((t) => [t.dataset.round, t.value.replace(/\r\n?/g, '\n').trim()]));
+    item.rounds = (item.rounds || [])
+        .map((round) => (edited.has(round.id) ? { ...round, text: edited.get(round.id) } : round))
+        .filter((round) => String(round?.text || '').trim());
+    await saveChatStore();
+    archiveEditId = null;
+    renderArchive();
+    toastr.success('Сохранено', TOAST_TITLE);
 }
 
 // ---------- Вопросы из зала ----------
@@ -1811,6 +1902,7 @@ function onChatChanged() {
     feedOpenFor = null;
     resetLoreTokenCache();
     archiveOpenId = null;
+    archiveEditId = null;
     if (bankEditorEl) bankEditorEl.hidden = true;
     // Кнопки запуска прячутся, когда чата нет (главная страница)
     syncLaunchers();

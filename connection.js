@@ -2,7 +2,7 @@
 // Порт из Koma (а там — из DS Comments): профиль подключения таверны
 // или свой OpenAI-совместимый адрес напрямую, плюс джейлбрейк.
 
-import { ctx, getSettings, substitute } from './store.js';
+import { ctx, getSettings, substitute, stripModelJunk } from './store.js';
 
 // Запрос не потоковый, так что это потолок на весь ответ целиком.
 const CUSTOM_TIMEOUT_MS = 300_000;
@@ -155,6 +155,7 @@ export function stripPreamble(text) {
     // Скрытые HTML-комментарии (<!-- HT … --> от Hearthtide и т. п.) — модель иногда дописывает их по инерции.
     // Последнее правило — для незакрытого комментария в самом конце ответа.
     out = out.replace(/<!--[\s\S]*?-->/g, '').replace(/<!--[\s\S]*$/, '').replace(/[ \t]+\n/g, '\n').trim();
+    out = stripModelJunk(out);
     // Всё, что до первой реплики интервью, — вступление модели.
     const firstTag = out.search(/^\s*\[(?:TITLE|Q|A|F|M)\b/im);
     if (firstTag > 0) out = out.slice(firstTag).trim();

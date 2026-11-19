@@ -119,6 +119,23 @@ export async function confirmPopup(text) {
     return window.confirm(text);
 }
 
+/**
+ * Мусор, который модели дописывают по инерции: блоки вроде <ElicitationsGroup>…</ElicitationsGroup>
+ * (подсказки «о чём спросить дальше» из чужих чат-приложений) — любые XML-теги с заглавной буквы.
+ * Наша разметка ([Q], [A: …], *ремарки*) так не выглядит, её это не задевает.
+ */
+export function stripModelJunk(text) {
+    let out = String(text || '');
+    let previous;
+    do {
+        previous = out;
+        out = out.replace(/<([A-Z][\w-]*)\b[^>]*>[\s\S]*?<\/\1\s*>/g, '');
+    } while (out !== previous);
+    out = out.replace(/<[A-Z][\w-]*\b[^<>]*\/>/g, '');       // одиночные <Elicitation … />
+    out = out.replace(/\n\s*<[A-Z][\w-]*\b[\s\S]*$/, '');   // незакрытый блок в самом конце
+    return out.replace(/[ \t]+\n/g, '\n').trim();
+}
+
 export function substitute(text) {
     try {
         return ctx().substituteParams(text);
