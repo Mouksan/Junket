@@ -1310,6 +1310,50 @@
     gap: 8px;
 }
 
+/* Нижний ряд в одну строку: на узком экране кнопки ужимаются, ↑ не уезжает на новую строку */
+.jnk-extras-buttons:has(.jnk-to-top) {
+    flex-wrap: nowrap;
+}
+
+.jnk-extras-buttons:has(.jnk-to-top) > .jnk-btn:not(.jnk-to-top) {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+@media (max-width: 600px) {
+    .jnk-extras-buttons:has(.jnk-to-top) {
+        gap: 6px;
+    }
+
+    .jnk-extras-buttons:has(.jnk-to-top) > .jnk-btn:not(.jnk-to-top) {
+        padding-left: 8px;
+        padding-right: 8px;
+        font-size: 0.92em;
+    }
+}
+
+@media (max-width: 400px) {
+    .jnk-extras-buttons:has(.jnk-to-top) > .jnk-btn:not(.jnk-to-top) {
+        padding-left: 6px;
+        padding-right: 6px;
+        font-size: 0.82em;
+        letter-spacing: -0.01em;
+    }
+}
+
+/* ↑ к началу — всегда справа в нижнем ряду */
+.jnk-extras-buttons .jnk-to-top {
+    flex-shrink: 0;
+    margin-left: auto;
+    border-radius: 50%;
+    min-width: 36px;
+    width: 36px;
+    height: 36px;
+    padding: 0;
+}
+
 .jnk-feed-panel {
     display: flex;
     flex-direction: column;

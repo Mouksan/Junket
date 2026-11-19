@@ -1386,7 +1386,9 @@ function renderArchiveViewer(pane, item) {
             ${renderInterviewHtml(item, { theme: theme.id, paper })}
             ${renderFeedHtml(item.feed, theme.id)}
         </div>
-        ${String(item.text || '').trim() && !isReaction(item.format) ? audiencePanelHtml(item) : ''}`;
+        ${String(item.text || '').trim() && !isReaction(item.format)
+        ? audiencePanelHtml(item)
+        : `<div class="jnk-audience"><div class="jnk-extras-buttons">${toTopButtonHtml()}</div></div>`}`;
 
     pane.querySelector('.jnk-back').addEventListener('click', () => {
         archiveOpenId = null;
@@ -1399,6 +1401,9 @@ function renderArchiveViewer(pane, item) {
         else toastr.error('Не получилось скопировать', TOAST_TITLE);
     });
     pane.querySelector('.jnk-remove').addEventListener('click', () => deleteInterview(item.id));
+    pane.querySelector('.jnk-to-top')?.addEventListener('click', () => {
+        overlayEl?.querySelector('.jnk-body')?.scrollTo?.({ top: 0, behavior: 'smooth' });
+    });
     pane.querySelector('.jnk-edit')?.addEventListener('click', () => {
         archiveEditId = item.id;
         renderArchive();
@@ -1413,6 +1418,11 @@ function renderArchiveViewer(pane, item) {
     });
     bindAudiencePanel(pane, item);
     bindFeedPanel(pane, item);
+}
+
+/** ↑ в нижнем ряду — обратно к началу интервью. */
+function toTopButtonHtml() {
+    return '<button class="jnk-btn jnk-icon-only jnk-to-top" type="button" title="К началу" aria-label="К началу"><i class="fa-solid fa-arrow-up"></i></button>';
 }
 
 // ---------- Редактирование (✎): сырой текст с разметкой ----------
@@ -1509,6 +1519,7 @@ function audiencePanelHtml(item) {
             <div class="jnk-extras-buttons">
                 <button class="jnk-btn jnk-audience-toggle" type="button">🎤 Вопросы из зала</button>
                 <button class="jnk-btn jnk-feed-toggle" type="button">💬 Реакция фандома</button>
+                ${toTopButtonHtml()}
             </div>
             <div class="jnk-audience-panel" ${open || running ? '' : 'hidden'}>
                 <label class="jnk-cast-field">
