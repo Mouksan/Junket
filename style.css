@@ -1370,6 +1370,42 @@
     margin: 0;
 }
 
+/* «Сценарист в студии»: панель под «После пилота» и блок сюжета (он же в «Как снимаем») */
+.jnk-writer-panel,
+.jnk-plan {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.jnk-writer-panel[hidden] {
+    display: none;
+}
+
+.jnk-plan-text {
+    min-height: 9em;
+}
+
+.jnk-plan-reload:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+/* Подписи кнопок нижнего ряда: короткие — только когда кнопок три и экран узкий */
+.jnk-lbl-short {
+    display: none;
+}
+
+@media (max-width: 600px) {
+    .jnk-extras-3 .jnk-lbl-long {
+        display: none;
+    }
+
+    .jnk-extras-3 .jnk-lbl-short {
+        display: inline;
+    }
+}
+
 .jnk-audience-panel {
     display: flex;
     flex-direction: column;

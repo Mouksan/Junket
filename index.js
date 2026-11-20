@@ -9,6 +9,7 @@
 // Этап 5г: вопросы из зала — раунды под интервью
 // Реакции фандома: лента комментов под интервью (порт из ST-Comments)
 // Темы: Журнал, Мессенджер, Газета, Сценарий, Досье; настройки переехали в окно (шестерёнка)
+// «Сценарист в студии»: сюжет из Скетчбука Plotweaver, формат и сегмент под «После пилота»
 
 import {
     ctx, getSettings, saveSettings, escapeHtml, makeId, formatDate, formatNumber, confirmPopup,
@@ -19,7 +20,8 @@ import {
     countLorebookTokens, resetLoreTokenCache, collectSources, buildSceneText,
     collectBankSources, getChatLorebookName, normalizeRecentCount, BANK_RECENT_MIN, BANK_RECENT_MAX, BANK_RECENT_STEP,
 } from './sources.js';
-import { buildInterviewPrompt, buildAudiencePrompt, buildFeedPrompt, buildBankPrompt } from './prompt.js';
+import { buildInterviewPrompt, buildAudiencePrompt, buildFeedPrompt, buildBankPrompt, buildWriterSegmentPrompt } from './prompt.js';
+import { getSketchbookPlots, getSketchbookPage, planFromPage, getWriterPlan, setWriterPlan, ensureWriterPlan, getWriter } from './writer.js';
 import {
     FEED_STYLES, FEED_COUNT_MIN, FEED_COUNT_MAX, getFeedStyle, loadFeedStyle, feedContract,
     parseComments, renderFeedHtml, feedPlainText,
@@ -28,10 +30,11 @@ import { requestModel } from './connection.js';
 import { addSettingsDrawer, settingsPaneHtml, bindSettingsPane, syncLookControls } from './settings.js';
 import { initLaunchers, syncLaunchers, setLauncherBusy } from './launcher.js';
 import { getTheme, normalizePaper, stageClass } from './themes.js';
-import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle, fullInterviewText } from './render.js';
+import { parseInterview, renderInterviewHtml, interviewPlainText, defaultTitle, fullInterviewText, isWriterRound } from './render.js';
 import {
-    FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, BANK_MODES, QUESTIONS_MIN, QUESTIONS_MAX,
-    getFormat, normalizeShoot, formatLabel, isReaction, WATCH_PLACES, MOMENTS_MAX, PILOT_VENUES,
+    FORMATS, FAN_VENUES, BANTER, VIBES, STUDIO, BANK_MODES,
+    getFormat, normalizeShoot, formatLabel, isReaction, WATCH_PLACES, PILOT_VENUES,
+    isPilot, isWriter, WRITER_VENUES, WRITER_Q_MIN, WRITER_Q_MAX, questionsRange,
 } from './formats.js';
 import { getMainRoles, normalizeCast, newNpc, invitableNpcs, castFromTurns, applyCast } from './cast.js';
 import { getBank, getList, listQuestions, addList, updateList, deleteList, questionsWord, parseGeneratedQuestions } from './bank.js';
@@ -468,7 +471,7 @@ function shootSectionHtml() {
             <div class="jnk-subtitle">Формат</div>
             <div class="jnk-chips">${chipsHtml(FORMATS, shoot.format, 'data-format')}</div>
 
-            <div class="jnk-venue" ${shoot.format === 'fans' ? '' : 'hidden'}>
+            <div class="jnk-venue jnk-fan-venue" ${shoot.format === 'fans' ? '' : 'hidden'}>
                 <div class="jnk-subtitle">Где</div>
                 <div class="jnk-chips">${chipsHtml(FAN_VENUES, shoot.venue, 'data-venue')}</div>
             </div>
@@ -479,6 +482,13 @@ function shootSectionHtml() {
                 <div class="jnk-hint">В конце каждый делает ставку на будущее — это отдельный вопрос, он не входит в число вопросов.</div>
             </div>
 
+            <div class="jnk-venue jnk-writer-venue" ${isWriter(shoot) ? '' : 'hidden'}>
+                <div class="jnk-subtitle">Где снимаем</div>
+                <div class="jnk-chips">${chipsHtml(WRITER_VENUES, shoot.writerVenue, 'data-writervenue')}</div>
+                <div class="jnk-hint">В конце — вопрос всем, сценаристке тоже: «Что бы вы переписали в этом сценарии?» Он не входит в число вопросов. Кто такая сценаристка — в ⚙.</div>
+                ${isWriter(shoot) ? planBlockHtml() : '<div class="jnk-plan-slot"></div>'}
+            </div>
+
             <div class="jnk-reaction" ${reaction ? '' : 'hidden'}>
                 <div class="jnk-subtitle">Где смотрят</div>
                 <div class="jnk-chips" data-place-group>${chipsHtml(WATCH_PLACES, shoot.place, 'data-place')}</div>
@@ -487,7 +497,7 @@ function shootSectionHtml() {
 
             <div class="jnk-questions">
                 <label class="jnk-subtitle" for="jnk_questions"><span class="jnk-qlabel">${reaction ? 'Моментов' : 'Вопросов'}</span>: <span class="jnk-qcount">${shoot.questions}</span></label>
-                <input id="jnk_questions" class="jnk-range-slider" type="range" min="${QUESTIONS_MIN}" max="${reaction ? MOMENTS_MAX : QUESTIONS_MAX}" step="1" value="${shoot.questions}">
+                <input id="jnk_questions" class="jnk-range-slider" type="range" min="${questionsRange(shoot.format)[0]}" max="${questionsRange(shoot.format)[1]}" step="1" value="${shoot.questions}">
                 <div class="jnk-hint jnk-qhint">${questionsHint(reaction)}</div>
             </div>
 
@@ -497,7 +507,7 @@ function shootSectionHtml() {
                 <div class="jnk-hint">Необязательно. Темы входят в число моментов.</div>
             </div>
 
-            <div class="jnk-bank-wrap" ${reaction ? 'hidden' : ''}>${bankRowHtml(shoot)}</div>
+            <div class="jnk-bank-wrap" ${reaction || isWriter(shoot) ? 'hidden' : ''}>${bankRowHtml(shoot)}</div>
 
             <div class="jnk-subtitle">Болтовня</div>
             <div class="jnk-seg jnk-banter">
@@ -522,17 +532,109 @@ function questionsHint(reaction) {
 /** Переключение формата: «Реакция» прячет вопросы, банк и интервьюера, показывает свои поля. */
 function applyFormatUi(section, shoot) {
     const reaction = isReaction(shoot);
-    section.querySelector('.jnk-venue:not(.jnk-pilot-venue)').hidden = shoot.format !== 'fans';
+    section.querySelector('.jnk-fan-venue').hidden = shoot.format !== 'fans';
     section.querySelector('.jnk-pilot-venue').hidden = shoot.format !== 'pilot';
+    const writerBox = section.querySelector('.jnk-writer-venue');
+    writerBox.hidden = !isWriter(shoot);
+    // Блок сюжета рисуем при первом показе: черновик берётся из Скетчбука только когда он нужен
+    const slot = writerBox.querySelector('.jnk-plan-slot');
+    if (slot && isWriter(shoot)) {
+        slot.outerHTML = planBlockHtml();
+        bindPlanBlock(writerBox.querySelector('.jnk-plan'));
+    }
     section.querySelectorAll('.jnk-reaction').forEach((el) => { el.hidden = !reaction; });
-    section.querySelector('.jnk-bank-wrap').hidden = reaction;
+    section.querySelector('.jnk-bank-wrap').hidden = reaction || isWriter(shoot);
     section.querySelectorAll('[data-no-reaction]').forEach((row) => { row.hidden = reaction; });
     section.querySelector('.jnk-qlabel').textContent = reaction ? 'Моментов' : 'Вопросов';
     section.querySelector('.jnk-qhint').textContent = questionsHint(reaction);
     const slider = section.querySelector('#jnk_questions');
-    slider.max = reaction ? MOMENTS_MAX : QUESTIONS_MAX;
+    [slider.min, slider.max] = questionsRange(shoot.format).map(String);
     slider.value = shoot.questions;
     section.querySelector('.jnk-qcount').textContent = shoot.questions;
+}
+
+// ---------- Сюжет для сценаристки (общий черновик чата) ----------
+
+function planOptionLabel(page) {
+    const title = String(page.title || '').trim() || 'Без названия';
+    return `${page.favorite ? '★ ' : ''}${title}`;
+}
+
+/** Выбор страницы Скетчбука + поле сюжета. Один и тот же черновик и у чипса, и под «После пилота». */
+function planBlockHtml() {
+    const plan = ensureWriterPlan();
+    const plots = getSketchbookPlots();
+    const options = plots.map((p) => `<option value="${escapeHtml(p.id)}" ${p.id === plan.pageId ? 'selected' : ''}>${escapeHtml(planOptionLabel(p))}</option>`).join('');
+    const picker = plots.length
+        ? `<div class="jnk-bank-row">
+                <select class="text_pole jnk-bank-select jnk-plan-select" aria-label="Страница Скетчбука">
+                    <option value="" ${plan.pageId && getSketchbookPage(plan.pageId) ? '' : 'selected'}>— свой текст —</option>
+                    ${options}
+                </select>
+                <button class="jnk-btn jnk-plan-reload" type="button" title="Взять текст страницы из Скетчбука заново" ${plan.pageId && getSketchbookPage(plan.pageId) ? '' : 'disabled'}>↺ Взять из Скетчбука заново</button>
+            </div>`
+        : '<div class="jnk-hint">В Скетчбуке Plotweaver этого чата нет сюжетов — вставь сюжет сюда сам.</div>';
+    return `
+        <div class="jnk-plan">
+            <div class="jnk-subtitle">Сюжет сценаристки</div>
+            ${picker}
+            <textarea class="text_pole jnk-wishes jnk-plan-text" rows="7" placeholder="Что будет дальше: главные повороты, финал, кто с кем окажется. Сценаристка раскроет это в интервью.">${escapeHtml(plan.text)}</textarea>
+            <div class="jnk-hint">Правки остаются здесь, общие для этого чата. Страница в Plotweaver не меняется.</div>
+        </div>`;
+}
+
+/** Черновик отличается от страницы, из которой взят (или страница уже удалена)? */
+function planEdited(plan) {
+    if (!String(plan?.text || '').trim()) return false;
+    const page = getSketchbookPage(plan.pageId);
+    return !page || planFromPage(page) !== plan.text;
+}
+
+function bindPlanBlock(box) {
+    if (!box || box.dataset.bound) return;
+    box.dataset.bound = '1';
+    const select = box.querySelector('.jnk-plan-select');
+    const reload = box.querySelector('.jnk-plan-reload');
+    const area = box.querySelector('.jnk-plan-text');
+
+    const takePage = async (page) => {
+        const current = getWriterPlan() || { pageId: null, text: '' };
+        if (planEdited(current) && planFromPage(page) !== current.text
+            && !await confirmPopup('Заменить текст сюжета страницей из Скетчбука? Твои правки пропадут.')) {
+            return false;
+        }
+        const text = planFromPage(page);
+        setWriterPlan({ pageId: page.id, text });
+        area.value = text;
+        return true;
+    };
+
+    select?.addEventListener('change', async () => {
+        const plan = getWriterPlan() || { pageId: null, text: '' };
+        const page = getSketchbookPage(select.value);
+        if (!page) {
+            // «Свой текст»: текст остаётся, связь со страницей рвётся
+            setWriterPlan({ pageId: null, text: area.value });
+        } else if (!await takePage(page)) {
+            select.value = plan.pageId && getSketchbookPage(plan.pageId) ? plan.pageId : '';
+        }
+        if (reload) reload.disabled = !getSketchbookPage(getWriterPlan()?.pageId);
+    });
+
+    reload?.addEventListener('click', async () => {
+        const page = getSketchbookPage(getWriterPlan()?.pageId);
+        if (page && await takePage(page)) toastr.info('Сюжет взят из Скетчбука заново', TOAST_TITLE);
+    });
+
+    area.addEventListener('input', () => {
+        const plan = getWriterPlan() || { pageId: null, text: '' };
+        setWriterPlan({ pageId: plan.pageId, text: area.value });
+    });
+}
+
+/** Текст сюжета, с которым пойдём к модели (пусто — генерировать нечего). */
+function currentPlanText() {
+    return String(getWriterPlan()?.text || '').trim();
 }
 
 // ---------- Банк вопросов: строчка в «Как снимаем» ----------
@@ -625,6 +727,9 @@ function bindShootSection(pane) {
         } else if (btn.dataset.pilotvenue) {
             shoot.pilotVenue = btn.dataset.pilotvenue;
             setOn('[data-pilotvenue]', btn);
+        } else if (btn.dataset.writervenue) {
+            shoot.writerVenue = btn.dataset.writervenue;
+            setOn('[data-writervenue]', btn);
         } else if (btn.dataset.banter) {
             shoot.banter = btn.dataset.banter;
             section.querySelectorAll('[data-banter]').forEach((b) => b.classList.toggle('active', b === btn));
@@ -668,6 +773,9 @@ function bindShootSection(pane) {
         shoot.wishes = wishes.value;
         saveShoot(shoot);
     });
+
+    const plan = section.querySelector('.jnk-plan');
+    if (plan) bindPlanBlock(plan);
 
     const topics = section.querySelector('#jnk_topics');
     topics.addEventListener('input', () => {
@@ -829,6 +937,10 @@ async function onGoClick() {
         toastr.warning('Сначала выбери сообщения', TOAST_TITLE);
         return;
     }
+    if (isWriter(getShoot()) && !currentPlanText()) {
+        toastr.warning('Сценаристке нужен сюжет: выбери страницу Скетчбука или вставь текст', TOAST_TITLE);
+        return;
+    }
 
     const chatId = currentChatId();
     const store = getChatStore();
@@ -846,7 +958,10 @@ async function onGoClick() {
         if (!sceneText) throw new Error('В выбранных сообщениях нет текста.');
 
         const shoot = getShoot();
-        const { instruction, contextText } = buildInterviewPrompt({ sourcesText: sources.text, sceneText, ...range, shoot, cast: getCast() });
+        const withWriter = isWriter(shoot);
+        const plan = withWriter ? currentPlanText() : '';
+        const writer = withWriter ? getWriter() : null;
+        const { instruction, contextText } = buildInterviewPrompt({ sourcesText: sources.text, sceneText, ...range, shoot, cast: getCast(), plan, writer });
         const text = await requestModel({ instruction, contextText }, controller.signal);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
         if (!text.trim()) throw new Error('Модель вернула пустой ответ — попробуй ещё раз или увеличь лимит токенов ответа.');
@@ -862,9 +977,13 @@ async function onGoClick() {
             studio: shoot.studio,
             shoot: { ...shoot },    // весь выбор «Как снимаем» — чтобы вопросы из зала звучали тем же голосом
             rounds: [],
-            venue: shoot.format === 'fans' ? shoot.venue : shoot.format === 'pilot' ? shoot.pilotVenue : null,
+            venue: shoot.format === 'fans' ? shoot.venue
+                : shoot.format === 'pilot' ? shoot.pilotVenue
+                    : withWriter ? shoot.writerVenue : null,
             text,
         };
+        // Сюжет и сценаристка — какими были на съёмке: по ним потом отвечает зал
+        if (withWriter) Object.assign(item, { plan, writer });
         const saveTo = getChatStore();
         if (saveTo && currentChatId() === chatId) {
             saveTo.interviews.unshift(item);
@@ -1418,6 +1537,7 @@ function renderArchiveViewer(pane, item) {
     });
     bindAudiencePanel(pane, item);
     bindFeedPanel(pane, item);
+    bindWriterPanel(pane, item);
 }
 
 /** ↑ в нижнем ряду — обратно к началу интервью. */
@@ -1434,6 +1554,16 @@ function editableText(text) {
         .filter((line) => !/^\s*\[TITLE\b/i.test(line))
         .join('\n')
         .trim();
+}
+
+/** Подписи раундов в редакторе: сценаристку не считаем в номерах вопросов из зала. */
+function editorRoundLabels(rounds) {
+    let n = 0;
+    return rounds.map((round) => {
+        if (isWriterRound(round)) return [round, '✍️ Сценарист в студии'];
+        const i = n++;
+        return [round, `🎤 Вопросы из зала${i > 0 ? ` · раунд ${i + 1}` : ''}`];
+    });
 }
 
 function renderArchiveEditor(pane, item) {
@@ -1462,13 +1592,14 @@ function renderArchiveEditor(pane, item) {
                     <li><code>[A: Актёр (Персонаж)] …</code> — ответ; в скобках имя как в карточке</li>
                     <li><code>[F: @ник] …</code> — вопрос из зала</li>
                     <li><code>[M: 541] подпись</code> — момент в «Реакции на сцену»</li>
+                    <li><code>[A: Сценаристка (Автор)] …</code> — реплика сценаристки</li>
                     <li><code>*ремарка*</code>, <code>**жирное**</code>, <code>[BLEEP]</code> — плашка цензуры</li>
                     <li>Каждая реплика начинается с тега на новой строке, абзацы — через пустую строку.</li>
                 </ul>
             </details>
-            ${rounds.map((round, i) => `
+            ${editorRoundLabels(rounds).map(([round, label]) => `
                 <label class="jnk-cast-field">
-                    <span>🎤 Вопросы из зала${i > 0 ? ` · раунд ${i + 1}` : ''}</span>
+                    <span>${label}</span>
                     <textarea class="text_pole jnk-edit-text jnk-edit-round" data-round="${escapeHtml(round.id)}" spellcheck="false">${escapeHtml(stripModelJunk(round.text))}</textarea>
                 </label>`).join('')}
             <div class="jnk-hint">Пустой раунд при сохранении удалится. Лента фандома не редактируется — лишнюю пачку можно удалить корзиной.</div>
@@ -1510,17 +1641,37 @@ let audienceGen = null;            // { controller, chatId, itemId } пока и
 let audienceOpenFor = null;        // у какого интервью раскрыта панель
 const audienceDrafts = new Map();  // id интервью → черновик своих вопросов
 
+/** Сценаристка в этом интервью: формат «Сценарист» или её сегмент после пилота. */
+function writerOf(item) {
+    if (isWriter(item?.format)) return { writer: item.writer || getWriter(), plan: item.plan || '' };
+    const round = (item?.rounds || []).find((r) => isWriterRound(r) && String(r.text || '').trim());
+    return round ? { writer: round.writer || getWriter(), plan: round.plan || '' } : null;
+}
+
+/** Кнопка «Сценарист в студии» — только под «После пилота», и один раз на интервью. */
+function canCallWriter(item) {
+    return isPilot(item?.format) && !(item.rounds || []).some(isWriterRound);
+}
+
+/** Подпись кнопки: на узком экране, когда кнопок три, — короткая. */
+function extrasLabel(long, short) {
+    return `<span class="jnk-lbl-long">${long}</span><span class="jnk-lbl-short">${short}</span>`;
+}
+
 function audiencePanelHtml(item) {
     const s = getSettings();
     const open = audienceOpenFor === item.id;
     const running = audienceGen && audienceGen.itemId === item.id;
+    const writerBtn = canCallWriter(item);
     return `
         <div class="jnk-audience">
-            <div class="jnk-extras-buttons">
-                <button class="jnk-btn jnk-audience-toggle" type="button">🎤 Вопросы из зала</button>
-                <button class="jnk-btn jnk-feed-toggle" type="button">💬 Реакция фандома</button>
+            <div class="jnk-extras-buttons ${writerBtn ? 'jnk-extras-3' : ''}">
+                <button class="jnk-btn jnk-audience-toggle" type="button" title="Вопросы из зала">🎤 ${extrasLabel('Вопросы из зала', 'Зал')}</button>
+                <button class="jnk-btn jnk-feed-toggle" type="button" title="Реакция фандома">💬 ${extrasLabel('Реакция фандома', 'Фандом')}</button>
+                ${writerBtn ? `<button class="jnk-btn jnk-writer-toggle" type="button" title="Сценарист в студии">✍️ ${extrasLabel('Сценарист в студии', 'Сценарист')}</button>` : ''}
                 ${toTopButtonHtml()}
             </div>
+            ${writerBtn ? writerPanelHtml(item) : ''}
             <div class="jnk-audience-panel" ${open || running ? '' : 'hidden'}>
                 <label class="jnk-cast-field">
                     <span>Свои вопросы (необязательно)</span>
@@ -1626,6 +1777,7 @@ async function onAudienceClick(itemId) {
             count,
             ownQuestions: own,
             nick,
+            ...(writerOf(item) || {}),
         });
         const text = await requestModel({ instruction, contextText }, controller.signal);
         if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
@@ -1647,6 +1799,143 @@ async function onAudienceClick(itemId) {
         }
     } finally {
         if (audienceGen?.controller === controller) audienceGen = null;
+        refreshBusy();
+        refreshViewer(itemId);
+    }
+}
+
+// ---------- Сценаристка под «После пилота» ----------
+
+let writerGen = null;        // { controller, chatId, itemId } пока идёт запрос
+let writerOpenFor = null;    // у какого интервью раскрыта панель
+
+function writerQuestionsSetting() {
+    const n = Math.round(Number(getSettings().writerQuestions));
+    return Number.isFinite(n) ? Math.min(WRITER_Q_MAX, Math.max(WRITER_Q_MIN, n)) : WRITER_Q_MIN;
+}
+
+function writerPanelHtml(item) {
+    const running = writerGen && writerGen.itemId === item.id;
+    const open = writerOpenFor === item.id || running;
+    const n = writerQuestionsSetting();
+    return `
+        <div class="jnk-writer-panel" ${open ? '' : 'hidden'}>
+            <div class="jnk-hint">Сценаристка входит после ставок: раскрывает сюжет и проходится по теориям. Студия, каст, вайбы и площадка — как у этого интервью. Кто она такая — в ⚙.</div>
+            ${open ? planBlockHtml() : '<div class="jnk-plan-slot"></div>'}
+            <div class="jnk-questions">
+                <label class="jnk-subtitle">Вопросов: <span class="jnk-writer-qcount">${n}</span></label>
+                <input class="jnk-range-slider jnk-writer-q" type="range" min="${WRITER_Q_MIN}" max="${WRITER_Q_MAX}" step="1" value="${n}" aria-label="Вопросов сценаристке">
+                <div class="jnk-hint">В конце — вопрос всем: «Что бы вы переписали в этом сценарии?» Он не входит в число вопросов.</div>
+            </div>
+            <div class="jnk-actions jnk-audience-actions">
+                <button class="jnk-go jnk-writer-go ${running ? 'jnk-stop' : ''}" type="button">${running ? '<i class="fa-solid fa-stop"></i> Стоп' : 'Снять ✍️'}</button>
+                <span class="jnk-status">${running ? '<i class="fa-solid fa-spinner fa-spin"></i> Сценаристка входит…' : ''}</span>
+            </div>
+        </div>`;
+}
+
+function bindWriterPanel(pane, item) {
+    const box = pane.querySelector('.jnk-audience');
+    const panel = box?.querySelector('.jnk-writer-panel');
+    if (!panel) return;
+    const plan = panel.querySelector('.jnk-plan');
+    if (plan) bindPlanBlock(plan);
+    box.querySelector('.jnk-writer-toggle').addEventListener('click', () => {
+        panel.hidden = !panel.hidden;
+        writerOpenFor = panel.hidden ? null : item.id;
+        const slot = panel.querySelector('.jnk-plan-slot');
+        if (slot && !panel.hidden) {
+            slot.outerHTML = planBlockHtml();
+            bindPlanBlock(panel.querySelector('.jnk-plan'));
+        }
+    });
+    const slider = panel.querySelector('.jnk-writer-q');
+    slider.addEventListener('input', () => {
+        panel.querySelector('.jnk-writer-qcount').textContent = slider.value;
+    });
+    slider.addEventListener('change', () => {
+        getSettings().writerQuestions = Number(slider.value);
+        saveSettings();
+    });
+    panel.querySelector('.jnk-writer-go').addEventListener('click', () => onWriterClick(item.id));
+}
+
+async function onWriterClick(itemId) {
+    if (writerGen) {
+        writerGen.controller.junketQuiet = true;
+        writerGen.controller.abort();
+        const stopped = writerGen.itemId;
+        writerGen = null;
+        refreshBusy();
+        toastr.info('Генерация остановлена', TOAST_TITLE);
+        refreshViewer(stopped);
+        return;
+    }
+    const store = getChatStore();
+    const item = store?.interviews.find((i) => i.id === itemId);
+    if (!item?.range) {
+        toastr.warning('У этого интервью нет диапазона сообщений — позвать сценаристку не получится', TOAST_TITLE);
+        return;
+    }
+    if (!canCallWriter(item)) {
+        toastr.info('Сценаристка уже была в этом интервью', TOAST_TITLE);
+        return;
+    }
+    const plan = currentPlanText();
+    if (!plan) {
+        toastr.warning('Сценаристке нужен сюжет: выбери страницу Скетчбука или вставь текст', TOAST_TITLE);
+        return;
+    }
+
+    const writer = getWriter();
+    const count = writerQuestionsSetting();
+    const chatId = currentChatId();
+    const controller = new AbortController();
+    writerGen = { controller, chatId, itemId };
+    refreshBusy();
+    writerOpenFor = itemId;
+    refreshViewer(itemId);
+
+    try {
+        const last = lastIndex();
+        if (item.range.from > last) throw new Error('Сообщений из этого интервью в чате больше нет.');
+        const to = Math.min(item.range.to, last);
+        const sources = await collectSources(store.sources);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+
+        const { instruction, contextText } = buildWriterSegmentPrompt({
+            sourcesText: sources.text,
+            sceneText: buildSceneText(item.range.from, to),
+            from: item.range.from,
+            to,
+            shoot: item.shoot || getShoot(),
+            cast: getCast(),
+            interviewText: fullInterviewText(item),
+            count,
+            plan,
+            writer,
+        });
+        const text = await requestModel({ instruction, contextText }, controller.signal);
+        if (controller.signal.aborted) throw new DOMException('Aborted', 'AbortError');
+        if (!text.trim()) throw new Error('Модель вернула пустой ответ — попробуй ещё раз или увеличь лимит токенов ответа.');
+
+        const fresh = getChatStore()?.interviews.find((i) => i.id === itemId);
+        if (!fresh || currentChatId() !== chatId) return;
+        if (!Array.isArray(fresh.rounds)) fresh.rounds = [];
+        // Сюжет и сценаристка — какими были на съёмке: по ним потом отвечает зал
+        fresh.rounds.push({ id: makeId(), createdAt: Date.now(), kind: 'writer', text, plan, writer });
+        await saveChatStore();
+        writerOpenFor = null;
+        toastr.success('Сценаристка в студии ✍️', TOAST_TITLE);
+    } catch (error) {
+        if (controller.signal.aborted || error?.name === 'AbortError') {
+            if (!controller.junketQuiet) toastr.info('Генерация остановлена', TOAST_TITLE);
+        } else {
+            console.error('[Junket]', error);
+            toastr.error(String(error?.message || error), TOAST_TITLE);
+        }
+    } finally {
+        if (writerGen?.controller === controller) writerGen = null;
         refreshBusy();
         refreshViewer(itemId);
     }
@@ -1789,7 +2078,10 @@ async function deleteFeed(itemId) {
 }
 
 async function deleteRound(itemId, roundId) {
-    const ok = await confirmPopup('Удалить этот раунд вопросов из зала? Отменить не получится.');
+    const target = getChatStore()?.interviews.find((i) => i.id === itemId)?.rounds?.find((r) => r.id === roundId);
+    const ok = await confirmPopup(isWriterRound(target)
+        ? 'Удалить сегмент сценаристки? Отменить не получится — зато её можно будет позвать заново.'
+        : 'Удалить этот раунд вопросов из зала? Отменить не получится.');
     if (!ok) return;
     const item = getChatStore()?.interviews.find((i) => i.id === itemId);
     if (!item || !Array.isArray(item.rounds)) return;
@@ -1863,7 +2155,7 @@ async function deleteInterview(id) {
 
 /** Кнопки запуска пульсируют, пока идёт любая генерация. */
 function refreshBusy() {
-    setLauncherBusy(Boolean(generation || audienceGen || feedGen || bankGen));
+    setLauncherBusy(Boolean(generation || audienceGen || feedGen || bankGen || writerGen));
 }
 
 function addWandButton() {
@@ -1909,8 +2201,16 @@ function onChatChanged() {
         refreshBusy();
         toastr.info('Сочинение вопросов остановлено: сменился чат', TOAST_TITLE);
     }
+    if (writerGen) {
+        writerGen.controller.junketQuiet = true;
+        writerGen.controller.abort();
+        writerGen = null;
+        refreshBusy();
+        toastr.info('Сценаристка остановлена: сменился чат', TOAST_TITLE);
+    }
     audienceOpenFor = null;
     feedOpenFor = null;
+    writerOpenFor = null;
     resetLoreTokenCache();
     archiveOpenId = null;
     archiveEditId = null;

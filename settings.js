@@ -2,7 +2,7 @@
 // в ящике расширений осталась только кнопка «Открыть Junket».
 // Категории сворачиваются, как в Koma и DS Comments. Открыто сразу только «Оформление».
 
-import { ctx, getSettings, saveSettings, escapeHtml } from './store.js';
+import { ctx, getSettings, saveSettings, escapeHtml, DEFAULT_WRITER_PORTRAIT } from './store.js';
 import { LANGUAGES } from './formats.js';
 import { THEMES, PAPERS, getTheme, normalizePaper, stageClass, paperThemeLabels, DEMO_ITEM, DEMO_PERSONA } from './themes.js';
 import { renderInterviewHtml } from './render.js';
@@ -84,6 +84,15 @@ export function settingsPaneHtml() {
         <input type="number" id="jnk_lore_limit" class="text_pole" min="0" max="200000" step="1000" value="${escapeHtml(s.loreTokenLimit)}">
         <div class="jnk-set-hint">Если отмеченные лорбуки толще, записи с конца отрезаются целиком.</div>`;
 
+    const writer = `
+        <label for="jnk_writer_name" class="jnk-label">Имя</label>
+        <input type="text" id="jnk_writer_name" class="text_pole" placeholder="Сценаристка" value="${escapeHtml(s.writerName)}">
+        <div class="jnk-set-hint">Так она подписана в интервью. Пусто — «Сценаристка».</div>
+        <label for="jnk_writer_portrait" class="jnk-label">Какая она</label>
+        <textarea id="jnk_writer_portrait" class="text_pole jnk-jb-text" rows="5">${escapeHtml(s.writerPortrait)}</textarea>
+        <div class="jnk-set-hint">Характер и манера для формата «✍️ Сценарист в студии» и кнопки под «После пилота». Только общие черты, без личного: этот текст уходит модели. Пусто — портрет по умолчанию.</div>
+        <button type="button" class="menu_button jnk-writer-reset" id="jnk_writer_reset">Вернуть портрет по умолчанию</button>`;
+
     const jailbreak = `
         <label class="checkbox_label jnk-set-section">
             <input type="checkbox" id="jnk_jb_enabled" ${s.jailbreakEnabled ? 'checked' : ''}>
@@ -107,6 +116,7 @@ export function settingsPaneHtml() {
             ${categoryHtml('fa-palette', 'Оформление', look, true)}
             ${categoryHtml('fa-plug', 'Модель для интервью', model)}
             ${categoryHtml('fa-book', 'Лорбуки', lore)}
+            ${categoryHtml('fa-pen-nib', 'Сценаристка', writer)}
             ${categoryHtml('fa-key', 'Джейлбрейк', jailbreak)}
         </div>`;
 }
@@ -285,6 +295,15 @@ export function bindSettingsPane() {
 
     // Лорбуки
     bindNumber('jnk_lore_limit', 'loreTokenLimit', 0, 200000, 30000);
+
+    // Сценаристка
+    bindText('jnk_writer_name', 'writerName');
+    bindText('jnk_writer_portrait', 'writerPortrait');
+    document.getElementById('jnk_writer_reset').addEventListener('click', () => {
+        getSettings().writerPortrait = DEFAULT_WRITER_PORTRAIT;
+        saveSettings();
+        document.getElementById('jnk_writer_portrait').value = DEFAULT_WRITER_PORTRAIT;
+    });
 
     // Джейлбрейк
     document.getElementById('jnk_jb_enabled').addEventListener('change', (e) => {

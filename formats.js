@@ -63,6 +63,14 @@ Formality: informal and playful.`,
         prompt: `An interview right after the pilot episode, about the series as a whole. Nobody knows how the story goes on: the interviewer asks where the whole story is heading and where the relationships will end up by the finale, and everyone guesses, theorizes, argues and makes bets.`,
     },
     {
+        id: 'writer',
+        formality: null,   // градус задаёт «где снимаем» (WRITER_VENUES)
+        icon: '✍️',
+        label: 'Сценарист в студии',
+        questions: 15,
+        prompt: `An interview with the story's screenwriter as a special guest. She reveals the plot she has planned for the series, and everyone in the studio reacts to it.`,
+    },
+    {
         id: 'reaction',
         formality: 'informal',
         icon: '👀',
@@ -93,6 +101,46 @@ export const PILOT_VENUES = [
 
 export function getPilotVenue(id) {
     return PILOT_VENUES.find((v) => v.id === id) || PILOT_VENUES[1];
+}
+
+// «Сценарист в студии»: где снимают — от этого градус
+export const WRITER_VENUES = [
+    {
+        id: 'press',
+        formality: 'formal',
+        label: 'Пресс-конференция',
+        short: 'Пресс-конференция',
+        prompt: 'Venue: a press conference. Professional and on message: polished answers, careful wording, no vulgar jokes, no slang, no swearing.',
+    },
+    {
+        id: 'backstage',
+        formality: 'informal',
+        label: 'Закулисье',
+        short: 'Закулисье',
+        prompt: 'Venue: backstage, after hours, off the record. Completely informal: jokes, teasing, arguments, slang and swearing are welcome.',
+    },
+];
+
+export function getWriterVenue(id) {
+    return WRITER_VENUES.find((v) => v.id === id) || WRITER_VENUES[1];
+}
+
+/** «Сценарист в студии». */
+export function isWriter(shootOrFormat) {
+    const id = typeof shootOrFormat === 'string' ? shootOrFormat : shootOrFormat?.format;
+    return id === 'writer';
+}
+
+// Как сценаристка подписана в разметке: [A: Имя (Автор)]. «Закрепить каст» её пропускает
+export const WRITER_ROLE = 'Автор';
+export const WRITER_Q_MIN = 15;
+export const WRITER_Q_MAX = 20;
+
+/** Сколько вопросов можно у формата: [min, max]. */
+export function questionsRange(format) {
+    if (isReaction(format)) return [QUESTIONS_MIN, MOMENTS_MAX];
+    if (isWriter(format)) return [WRITER_Q_MIN, WRITER_Q_MAX];
+    return [QUESTIONS_MIN, QUESTIONS_MAX];
 }
 
 /** «После пилота»: интервью о будущем, все только гадают. */
@@ -213,7 +261,9 @@ export function getFormat(id) {
 export function getFormality(shoot) {
     const format = getFormat(shoot.format);
     if (format.formality) return format.formality;
-    return isPilot(format.id) ? getPilotVenue(shoot.pilotVenue).formality : getVenue(shoot.venue).formality;
+    if (isPilot(format.id)) return getPilotVenue(shoot.pilotVenue).formality;
+    if (isWriter(format.id)) return getWriterVenue(shoot.writerVenue).formality;
+    return getVenue(shoot.venue).formality;
 }
 
 export function getVenue(id) {
@@ -230,6 +280,7 @@ export function defaultShoot() {
         questions: getFormat('junket').questions,
         venue: 'stream',
         pilotVenue: 'podcast',   // «После пилота»: пресс-день или подкаст
+        writerVenue: 'backstage', // «Сценарист в студии»: пресс-конференция или закулисье
         banter: 'light',
         vibes: { chemistry: null, interviewer: null, rating: null },
         wishes: '',
@@ -258,7 +309,8 @@ export function normalizeShoot(saved) {
     const format = FORMATS.some((f) => f.id === s.format) ? s.format : base.format;
     let questions = Math.round(Number(s.questions));
     if (!Number.isFinite(questions)) questions = getFormat(format).questions;
-    questions = Math.min(isReaction(format) ? MOMENTS_MAX : QUESTIONS_MAX, Math.max(QUESTIONS_MIN, questions));
+    const [qMin, qMax] = questionsRange(format);
+    questions = Math.min(qMax, Math.max(qMin, questions));
     const vibes = {};
     for (const group of VIBES) {
         const value = s.vibes?.[group.id];
@@ -269,6 +321,7 @@ export function normalizeShoot(saved) {
         questions,
         venue: FAN_VENUES.some((v) => v.id === s.venue) ? s.venue : base.venue,
         pilotVenue: PILOT_VENUES.some((v) => v.id === s.pilotVenue) ? s.pilotVenue : base.pilotVenue,
+        writerVenue: WRITER_VENUES.some((v) => v.id === s.writerVenue) ? s.writerVenue : base.writerVenue,
         banter: BANTER.some((b) => b.id === s.banter) ? s.banter : base.banter,
         vibes,
         wishes: typeof s.wishes === 'string' ? s.wishes : '',
@@ -288,6 +341,7 @@ export function formatLabel(formatId, venueId) {
     let venue = '';
     if (f.id === 'fans' && venueId) venue = ` (${getVenue(venueId).label})`;
     if (f.id === 'pilot' && venueId) venue = ` (${getPilotVenue(venueId).short})`;
+    if (f.id === 'writer' && venueId) venue = ` (${getWriterVenue(venueId).short})`;
     return `${f.icon} ${f.label}${venue}`;
 }
 

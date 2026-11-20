@@ -9,7 +9,7 @@
 // Внутри реплик: *ремарка*, **жирное**, абзацы через пустую строку.
 
 import { ctx, escapeHtml, formatDate, stripModelJunk } from './store.js';
-import { formatLabel } from './formats.js';
+import { formatLabel, WRITER_ROLE } from './formats.js';
 import { getTheme, normalizePaper } from './themes.js';
 import { hashHue } from './comments.js';
 import { user_avatar } from '../../../personas.js';
@@ -262,10 +262,27 @@ function headHtml(env) {
         </header>`;
 }
 
-function roundHeadText(theme, i) {
+/** Раунд сценаристки (её сегмент под «После пилота»). */
+export function isWriterRound(round) {
+    return round?.kind === 'writer';
+}
+
+/**
+ * Шапка раунда. i — номер среди вопросов из зала (сценаристку не считаем),
+ * scene — номер сегмента по порядку (для «Сценария»: сцены идут подряд).
+ */
+function roundHeadText(theme, i, round, scene = i) {
+    if (isWriterRound(round)) {
+        if (theme === 'newspaper') return 'Слово автору';
+        if (theme === 'script') return `Сцена ${scene + 2}. Входит сценаристка`;
+        if (theme === 'dossier') return `Приложение ${APPENDIX[scene] || scene + 1}. Показания автора`;
+        if (theme === 'scroll') return '❦ Слово сочинителя ❦';
+        if (theme === 'subtitles') return 'Специальный гость: сценаристка';
+        return '✍️ Сценарист в студии';
+    }
+    if (theme === 'script') return `Сцена ${scene + 2}. Инт. зрительный зал — вопросы из зала`;
+    if (theme === 'dossier') return `Приложение ${APPENDIX[scene] || scene + 1}. Вопросы посторонних лиц`;
     if (theme === 'newspaper') return `Письма читателей${i > 0 ? ` · ${ROMAN[i] || i + 1}` : ''}`;
-    if (theme === 'script') return `Сцена ${i + 2}. Инт. зрительный зал — вопросы из зала`;
-    if (theme === 'dossier') return `Приложение ${APPENDIX[i] || i + 1}. Вопросы посторонних лиц`;
     if (theme === 'scroll') return `❦ Вопросы из зала${i > 0 ? ` · ${ROMAN[i] || i + 1}` : ''} ❦`;
     if (theme === 'subtitles') return `Вопросы из зала${i > 0 ? ` · часть ${i + 1}` : ''}`;
     return `🎤 Вопросы из зала${i > 0 ? ` · раунд ${i + 1}` : ''}`;
@@ -300,16 +317,18 @@ export function renderInterviewHtml(item, opts = {}) {
 
     const cast = { ...buildCastMap(), unknown: new Map() };   // цвета общие для интервью и раундов
     const rounds = (item.rounds || []).filter((r) => String(r?.text || '').trim());
-    const roundsHtml = rounds.map((round, i) => {
+    let audienceNo = 0;
+    const roundsHtml = rounds.map((round, scene) => {
+        const i = isWriterRound(round) ? 0 : audienceNo++;
         const roundTurns = parseInterview(round.text).turns;
         const body = roundTurns.length
             ? `<div class="jnk-iv-turns">${turnsHtml(roundTurns, cast, round.ownNick, env)}</div>`
             : `<div class="jnk-iv-plain">${bodyHtml(stripModelJunk(round.text))}</div>`;
         return `
-            <section class="jnk-round" data-round="${escapeHtml(round.id)}">
+            <section class="jnk-round${isWriterRound(round) ? ' jnk-round-writer' : ''}" data-round="${escapeHtml(round.id)}">
                 <div class="jnk-round-head">
-                    <span>${escapeHtml(roundHeadText(env.theme, i))}</span>
-                    ${env.preview ? '' : '<button class="jnk-icon-btn jnk-round-delete" type="button" title="Удалить раунд"><i class="fa-solid fa-trash-can"></i></button>'}
+                    <span>${escapeHtml(roundHeadText(env.theme, i, round, scene))}</span>
+                    ${env.preview ? '' : `<button class="jnk-icon-btn jnk-round-delete" type="button" title="${isWriterRound(round) ? 'Удалить сегмент сценаристки' : 'Удалить раунд'}"><i class="fa-solid fa-trash-can"></i></button>`}
                 </div>
                 ${body}
             </section>`;
@@ -590,7 +609,7 @@ function subtitleTurns(turns, cast, own) {
         const key = (turn.character || turn.actor).trim().toLowerCase();
         const plate = key === prevKey ? '' : `
             <div class="jnk-tv-plate" style="--jnk-speaker:${speakerLook(turn, cast).color}">
-                <b>${escapeHtml(turn.actor)}</b>${turn.character ? `<span> · исполнитель роли ${escapeHtml(turn.character)}</span>` : ''}
+                <b>${escapeHtml(turn.actor)}</b>${turn.character ? `<span> · ${turn.character === WRITER_ROLE ? 'автор сценария' : `исполнитель роли ${escapeHtml(turn.character)}`}</span>` : ''}
             </div>`;
         prevKey = key;
         return `${plate}<div class="jnk-tv-sub">${subs(turn.body)}</div>`;
@@ -601,8 +620,14 @@ function subtitleTurns(turns, cast, own) {
 export function interviewPlainText(item) {
     const title = item.title || defaultTitle(item.range);
     const sections = [title, plainTurns(item.text)];
-    (item.rounds || []).forEach((round, i) => {
+    let audienceNo = 0;
+    (item.rounds || []).forEach((round) => {
         if (!String(round?.text || '').trim()) return;
+        if (isWriterRound(round)) {
+            sections.push('— ✍️ Сценарист в студии —', plainTurns(round.text));
+            return;
+        }
+        const i = audienceNo++;
         sections.push(`— Вопросы из зала${i > 0 ? ` · раунд ${i + 1}` : ''} —`, plainTurns(round.text));
     });
     return sections.join('\n\n').replace(BLEEP_RE, '█████');

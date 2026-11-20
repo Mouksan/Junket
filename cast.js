@@ -5,6 +5,7 @@
 //   npcs  — [{ id, name, actor, notes }] — НПС, которых можно звать в студию
 // Пустое имя актёра — модель придумывает его заново в каждом интервью.
 
+import { WRITER_ROLE } from './formats.js';
 import { ctx, makeId } from './store.js';
 import { user_avatar } from '../../../personas.js';
 
@@ -80,6 +81,7 @@ export function castFromTurns(turns, cast) {
     const seen = new Map();
     for (const turn of turns) {
         if (turn.kind !== 'a' || !turn.character || !turn.actor) continue;
+        if (turn.character.trim().toLowerCase() === WRITER_ROLE.toLowerCase()) continue;   // сценаристка — не роль
         const key = turn.character.trim().toLowerCase();
         if (!seen.has(key)) seen.set(key, { character: turn.character.trim(), actor: turn.actor.trim() });
     }

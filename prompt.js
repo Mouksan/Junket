@@ -3,7 +3,7 @@
 
 import { getMainRoles, normalizeCast } from './cast.js';
 import { getList, listQuestions, pickQuestions } from './bank.js';
-import { getFormat, getVenue, getBanter, getFormality, VIBES, normalizeShoot, getLanguage, isReaction, isPilot, getPilotVenue, getWatchPlace, topicList } from './formats.js';
+import { getFormat, getVenue, getBanter, getFormality, VIBES, normalizeShoot, getLanguage, isReaction, isPilot, getPilotVenue, getWatchPlace, topicList, isWriter, getWriterVenue, WRITER_ROLE } from './formats.js';
 import { getSettings } from './store.js';
 
 /** Описание формата и площадки (у фанатов и «После пилота» градус задаёт площадка). */
@@ -12,6 +12,7 @@ function formatPromptLines(shoot) {
     const lines = [format.prompt];
     if (format.id === 'fans') lines.push(getVenue(shoot.venue).prompt);
     if (format.id === 'pilot') lines.push(getPilotVenue(shoot.pilotVenue).prompt);
+    if (format.id === 'writer') lines.push(getWriterVenue(shoot.writerVenue).prompt);
     return lines;
 }
 
@@ -21,9 +22,46 @@ function formatBlock(shoot) {
     if (isPilot(shoot)) {
         lines.push('After the main questions, the interviewer always ends with one final question: everyone places a bet on how the story ends — where their relationship stands in the finale. Each person answers it with one or two sentences. This final question does not count toward the main questions.');
     }
+    if (isWriter(shoot)) lines.push(rewriteQuestionLine());
     lines.push(`${getBanter(shoot.banter).prompt} Follow-ups and reactions do not count toward the number of main questions.`);
     lines.push('Several actors may answer the same question.');
     return lines.join('\n');
+}
+
+// «Сценарист в студии»: последний вопрос всем, сценаристке тоже
+function rewriteQuestionLine() {
+    return 'After the main questions, the interviewer always ends with one final question to everyone, the screenwriter included: "What would you rewrite in this script?" Each person answers it with one sentence. This final question does not count toward the main questions.';
+}
+
+/**
+ * Кто такая сценаристка и как раскрывается сюжет.
+ * writer — { name, portrait }; segment — она входит посреди готового интервью «После пилота».
+ */
+function writerBlock(writer, actors, segment = false) {
+    const reactions = actors
+        ? '- The actors react to each reveal as themselves: shock, delight, outrage, laughter, "you can\'t do that to him!". They say what they love or hate about what is coming, what will be hard, painful or embarrassing to play, and what they would beg her to change.'
+        : '- The characters learn their own fate from their author, right here. They react from where they stand at the end of SCENES: denial, outrage, horror, smugness, bargaining, gloating over each other. They argue with her, plead, refuse to accept it. Their relationship and physical closeness stay exactly as at the end of SCENES while they hear about the future.';
+    const bets = segment
+        ? '\n- She has heard everything in INTERVIEW SO FAR, including the theories and the final bets. She reacts to them: mocks the wrong guesses, gets cagey or delighted about the ones close to the truth, quotes them back. The others react to how wrong or right they were.'
+        : '';
+    return `
+
+THE SCREENWRITER
+- ${writer.name} wrote the whole story and knows exactly where it goes. Tag her turns exactly [A: ${writer.name} (${WRITER_ROLE})]. She is a woman unless her name clearly says otherwise.
+- Her manner: ${writer.portrait}
+- She talks about the story, the characters and her work on the script. Her private life stays off the table: no family, partner, day job or personal anecdotes.
+- SCREENWRITER'S PLAN in the context is her plan for the rest of the story. She reveals it here on purpose: spoilers are the whole point of this ${segment ? 'segment' : 'interview'}.
+- She reveals the plan piece by piece, roughly in its order: the interviewer's questions lead her from one turn of the plot to the next. Use the concrete events, twists and details of the plan; never invent major events that contradict it. She may tease, hold back a detail for a beat, explain why she wrote it that way, or enjoy their suffering.
+${reactions}${bets}
+- She defends her choices and does not change the plan just because someone is upset.`;
+}
+
+function writerNamesLine(writer) {
+    return `\n- The screenwriter is the only exception: her tag is exactly [A: ${writer.name} (${WRITER_ROLE})].`;
+}
+
+function planContext(plan) {
+    return `\n\n# SCREENWRITER'S PLAN (the rest of the story; only the screenwriter knows it)\n${String(plan || '').trim()}`;
 }
 
 // «Реакция на сцену»: вместо вопросов — моменты, остановки по ходу сцены
@@ -166,6 +204,7 @@ function wishesBlock(shoot) {
 
 function modeOf(shoot) {
     if (isReaction(shoot)) return 'reaction';
+    if (isWriter(shoot)) return 'writer';
     if (isPilot(shoot)) return 'pilot';
     return 'interview';
 }
@@ -224,12 +263,20 @@ function whoCharacters(people) {
     return people.map((p) => `- ${p.npc ? `${p.name} (supporting character)` : p.name}`).join('\n');
 }
 
-// mode: 'interview' | 'reaction' | 'pilot'
+// Что известно о будущем: в «Сценаристе» — всё, что дальше SCENES, рассказывает она
+function knowledgeLine(who, mode) {
+    return mode === 'writer'
+        ? `- ${who} know the story only up to the end of SCENES. Everything beyond it they learn here, from the screenwriter, as she reveals it.`
+        : `- ${who} know the story only up to the end of SCENES. No spoilers or guesses beyond it presented as facts.`;
+}
+
+// mode: 'interview' | 'reaction' | 'pilot' | 'writer'
 function actorsPart(people, language, mode = 'interview', otherCast = '') {
     const premise = {
         interview: 'The scenes in SCENES were just filmed. Now the actors sit down together for the interview described in FORMAT, about filming these scenes.',
         reaction: 'The scenes in SCENES were just filmed. Now the actors watch the edited footage of these scenes together, as described in FORMAT.',
         pilot: 'SCENES is the pilot episode, just filmed. The actors have only read and played the pilot: the rest of the script is kept secret from them. Now they sit down together for the interview described in FORMAT.',
+        writer: 'The scenes in SCENES were just filmed. The actors have only read and played the story up to the end of SCENES: the rest of the script is kept secret from them. Now they sit down together for the interview described in FORMAT, and the screenwriter joins them.',
     }[mode];
     return `PREMISE
 The roleplay story in the context is treated as a TV series being filmed. Its characters are played by actors. ${premise}
@@ -246,7 +293,7 @@ THE ACTORS
 - Write the actors' names in ${language} script (Cyrillic for Russian), both in tags and in the text. The script is only a transliteration (for example, Маркус Лин, Юлиан Ветмор) — it is never a reason to pick Russian names.
 - Actors talk about their characters in the third person, and about filming: takes, improvisation, chemistry, what was hard, embarrassing, funny or memorable on set.
 - Ground everything in concrete moments from SCENES: specific lines, actions, details. Avoid generic answers that could fit any story.
-- The actors know the story only up to the end of SCENES. No spoilers or guesses beyond it presented as facts.`;
+${knowledgeLine('The actors', mode)}`;
 }
 
 function charactersPart(people, mode = 'interview') {
@@ -254,6 +301,7 @@ function charactersPart(people, mode = 'interview') {
         interview: 'The roleplay story in the context was filmed as a TV series, and its characters have just watched the footage of SCENES. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about what happened in these scenes and how it was shown.',
         reaction: 'The roleplay story in the context was filmed as a TV series. Now the characters themselves — not actors — watch the footage of SCENES together, as described in FORMAT, and react to what happened and how it was shown.',
         pilot: 'The roleplay story in the context is being filmed as a TV series, and SCENES is its pilot episode, which the characters have just watched. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, about where they think all of this will lead them in the end.',
+        writer: 'The roleplay story in the context is being filmed as a TV series, and the characters have just watched the footage of SCENES. Now the characters themselves — not actors — sit down together for the interview described in FORMAT, face to face with their author: the screenwriter who decides what happens to them next.',
     }[mode];
     return `PREMISE
 ${premise}
@@ -267,20 +315,21 @@ THE CHARACTERS
 - They react to the footage: comment on what they did and felt, argue about how they were portrayed, tease, defend themselves, confront each other.
 - They know they are in a show (the fourth wall is broken) but stay fully themselves. There are no actors and no talk about filming technique.
 - Ground everything in concrete moments from SCENES: specific lines, actions, details. Avoid generic answers that could fit any story.
-- They know the story only up to the end of SCENES. No spoilers or guesses beyond it presented as facts.`;
+${knowledgeLine('They', mode)}`;
 }
 
 /**
  * Собирает инструкцию и контекст для модели.
  * sourcesText — карточка/персона/лорбуки, sceneText — выбранные сообщения, shoot — выбор «Как снимаем».
  */
-export function buildInterviewPrompt({ sourcesText, sceneText, from, to, shoot: rawShoot, cast: rawCast }) {
+export function buildInterviewPrompt({ sourcesText, sceneText, from, to, shoot: rawShoot, cast: rawCast, plan = '', writer = null }) {
     const shoot = normalizeShoot(rawShoot);
     const cast = normalizeCast(rawCast);
     const language = getLanguage(getSettings().language).prompt;
     const people = studioPeople(shoot, cast);
     const actors = shoot.studio !== 'characters';
     const reaction = isReaction(shoot);
+    const withWriter = isWriter(shoot) && writer;
     const piece = reaction ? 'reaction video' : 'interview';
     const example = people[0]?.name || 'Name';
     const speakerTag = actors
@@ -302,7 +351,7 @@ ${speakerTag}`;
 ${actors ? actorsPart(people, language, modeOf(shoot), otherCastBlock(shoot, cast)) : charactersPart(people, modeOf(shoot))}
 
 FORMAT
-${reaction ? reactionFormatBlock(shoot) : formatBlock(shoot)}${pilotBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${bankBlock(shoot)}${reaction ? topicsBlock(shoot) : ''}${wishesBlock(shoot)}
+${reaction ? reactionFormatBlock(shoot) : formatBlock(shoot)}${pilotBlock(shoot)}${withWriter ? writerBlock(writer, actors) : ''}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${isWriter(shoot) ? '' : bankBlock(shoot)}${reaction ? topicsBlock(shoot) : ''}${wishesBlock(shoot)}
 
 ${rhythmBlock(shoot)}${interviewerBlock(shoot)}
 
@@ -315,7 +364,7 @@ Stage directions go in *asterisks* inside a turn: *laughs*, *covers face with bo
 Start immediately with the [TITLE] line. No preamble, no closing notes.
 
 NAMES
-- In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: ${actors ? 'Actor Name' : 'Speaker Name'} (${example})]. Never translate, transliterate or decline it.
+- In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: ${actors ? 'Actor Name' : 'Speaker Name'} (${example})]. Never translate, transliterate or decline it.${withWriter ? writerNamesLine(writer) : ''}
 - Everywhere else — in ${reaction ? 'captions, lines' : 'questions, answers'} and stage directions — use every name (characters, NPCs, places) in the form the story itself uses in SCENES, in ${language} and declined according to ${language} grammar. The character card, persona and lorebooks may spell names in another script; do not copy those spellings into the text.
 - If a name never appears in SCENES, transliterate it into ${language} the way the story would.
 
@@ -327,7 +376,7 @@ No words or phrases in other languages: no English (or any other) interjections,
     if (reaction) instruction = instruction.replaceAll('WHO IS INTERVIEWED', 'WHO IS WATCHING');
 
     const contextText = `${sourcesText ? `${sourcesText}\n\n` : ''}# SCENES (messages #${from}–#${to})
-${sceneText}
+${sceneText}${withWriter ? planContext(plan) : ''}
 
 # TASK
 Write the ${piece} now, following the instruction exactly.`;
@@ -342,7 +391,7 @@ Write the ${piece} now, following the instruction exactly.`;
  * interviewText — интервью вместе с прошлыми раундами; count — сколько зрительских вопросов;
  * ownQuestions — вопросы автора (могут быть пустыми); nick — ник автора в зале.
  */
-export function buildAudiencePrompt({ sourcesText, sceneText, from, to, shoot: rawShoot, cast: rawCast, interviewText, count, ownQuestions, nick }) {
+export function buildAudiencePrompt({ sourcesText, sceneText, from, to, shoot: rawShoot, cast: rawCast, interviewText, count, ownQuestions, nick, writer = null, plan = '' }) {
     const shoot = normalizeShoot(rawShoot);
     const cast = normalizeCast(rawCast);
     const language = getLanguage(getSettings().language).prompt;
@@ -351,6 +400,8 @@ export function buildAudiencePrompt({ sourcesText, sceneText, from, to, shoot: r
     const example = people[0]?.name || 'Name';
     const own = (ownQuestions || []).filter((q) => String(q).trim());
     const total = count + own.length;
+    // Сценаристка уже в студии (формат «Сценарист» или её сегмент после пилота): сюжет раскрыт
+    const mode = writer ? 'writer' : modeOf(shoot);
     const speakerTag = actors
         ? '[A: Actor Name (Character Name)] an answer — Character Name exactly as listed in WHO IS INTERVIEWED'
         : `[A: Speaker Name (Character Name)] an answer — Speaker Name is the character's own name in ${language}, Character Name exactly as listed in WHO IS INTERVIEWED`;
@@ -366,10 +417,10 @@ ${own.map((q, i) => `  ${i + 1}. ${q}`).join('\n')}`
 
     const instruction = `You are continuing a fictional ${actors ? 'behind-the-scenes ' : ''}interview with a segment of questions from the audience.
 
-${actors ? actorsPart(people, language, modeOf(shoot), otherCastBlock(shoot, cast)) : charactersPart(people, modeOf(shoot))}
+${actors ? actorsPart(people, language, mode, otherCastBlock(shoot, cast)) : charactersPart(people, mode)}
 
 FORMAT OF THE INTERVIEW
-${formatLines.join('\n')}${pilotBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${wishesBlock(shoot)}
+${formatLines.join('\n')}${writer ? audienceWriterBlock(writer) : pilotBlock(shoot)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${wishesBlock(shoot)}
 
 AUDIENCE SEGMENT
 - INTERVIEW SO FAR contains the interview already recorded. Continue it: the host briefly opens the floor to the audience in one short [Q] line, even if the interview already said goodbye.
@@ -390,7 +441,7 @@ Stage directions go in *asterisks* inside a turn. Emoji are allowed sparingly in
 No [TITLE]. Start immediately with the host's [Q] line. No preamble, no closing notes.
 
 NAMES
-- In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: ${actors ? 'Actor Name' : 'Speaker Name'} (${example})]. Never translate, transliterate or decline it. Use the same speaker names as in INTERVIEW SO FAR.
+- In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: ${actors ? 'Actor Name' : 'Speaker Name'} (${example})]. Never translate, transliterate or decline it. Use the same speaker names as in INTERVIEW SO FAR.${writer ? writerNamesLine(writer) : ''}
 - Everywhere else, use every name (characters, NPCs, places) in the form the story itself uses in SCENES, in ${language} and declined according to ${language} grammar.
 
 LANGUAGE
@@ -401,10 +452,88 @@ No words or phrases in other languages: no English (or any other) interjections,
 ${sceneText}
 
 # INTERVIEW SO FAR
-${interviewText}
+${interviewText}${writer ? planContext(plan) : ''}
 
 # TASK
 Write the audience segment now, following the instruction exactly.`;
+
+    return { instruction, contextText };
+}
+
+// Зал при сценаристке: она уже в студии и тоже отвечает
+function audienceWriterBlock(writer) {
+    return `
+
+THE SCREENWRITER IS IN THE STUDIO
+- ${writer.name}, the screenwriter, is part of INTERVIEW SO FAR and is still in the studio. Tag her turns exactly [A: ${writer.name} (${WRITER_ROLE})].
+- Her manner: ${writer.portrait}
+- Audience members may address questions to her, and she may answer any question, especially about the plot. She stays consistent with what she already revealed and with SCREENWRITER'S PLAN; she may reveal a little more of it, never anything that contradicts it.
+- Everyone already knows what she revealed in INTERVIEW SO FAR and reacts with that knowledge.
+- Her private life stays off the table: no family, partner, day job or personal anecdotes.`;
+}
+
+// ---------- Сценаристка после «После пилота» ----------
+
+/**
+ * Сегмент «Сценарист в студии» под готовым интервью «После пилота»: она входит после ставок.
+ * shoot — настройки того интервью (студия, каст, вайбы, площадка); count — сколько главных вопросов;
+ * plan — сюжет; writer — { name, portrait }.
+ */
+export function buildWriterSegmentPrompt({ sourcesText, sceneText, from, to, shoot: rawShoot, cast: rawCast, interviewText, count, plan, writer }) {
+    const shoot = normalizeShoot(rawShoot);
+    const cast = normalizeCast(rawCast);
+    const language = getLanguage(getSettings().language).prompt;
+    const people = studioPeople(shoot, cast);
+    const actors = shoot.studio !== 'characters';
+    const example = people[0]?.name || 'Name';
+    const speakerTag = actors
+        ? '[A: Actor Name (Character Name)] an answer — Character Name exactly as listed in WHO IS INTERVIEWED'
+        : `[A: Speaker Name (Character Name)] an answer — Speaker Name is the character's own name in ${language}, Character Name exactly as listed in WHO IS INTERVIEWED`;
+
+    const formatLines = formatPromptLines(shoot);
+    formatLines.push('Until now nobody knew how the story goes on. From this moment on, the screenwriter tells them.');
+
+    const instruction = `You are continuing a fictional ${actors ? 'behind-the-scenes ' : ''}interview with a surprise segment: the screenwriter of the series walks into the studio.
+
+${actors ? actorsPart(people, language, 'writer', otherCastBlock(shoot, cast)) : charactersPart(people, 'writer')}
+
+FORMAT OF THE INTERVIEW
+${formatLines.join('\n')}${writerBlock(writer, actors, true)}${vibesBlock(shoot)}${swearingBlock(shoot, language)}${wishesBlock(shoot)}
+
+SCREENWRITER SEGMENT
+- INTERVIEW SO FAR is the interview already recorded right after the pilot: everyone guessed where the story is going and placed their bets. Continue it, even if the interview already said goodbye.
+- Open with the host's [Q] line announcing a surprise guest. The screenwriter walks in (a stage direction), and the room reacts.
+- Then exactly ${count} main questions from the interviewer, to the screenwriter and to everyone else, as the plan unfolds.
+- ${rewriteQuestionLine()}
+- ${getBanter(shoot.banter).prompt} Follow-ups and reactions do not count toward the number of main questions.
+- The same people answer as in INTERVIEW SO FAR: the same names, personalities, relationships and running jokes. Do not repeat jokes or stories that were already told.
+
+${rhythmBlock(shoot)}${interviewerBlock(shoot)}
+
+OUTPUT MARKUP (strict)
+Every turn starts on a new line with a tag:
+[Q] the interviewer's question or remark
+${speakerTag}
+A turn may span several paragraphs until the next tag.
+Stage directions go in *asterisks* inside a turn. Emoji are allowed sparingly inside stage directions.
+No [TITLE]. Start immediately with the interviewer's [Q] line. No preamble, no closing notes.
+
+NAMES
+- In [A: …] tags, the name in parentheses is the character's name exactly as listed in WHO IS INTERVIEWED, for example [A: ${actors ? 'Actor Name' : 'Speaker Name'} (${example})]. Never translate, transliterate or decline it. Use the same speaker names as in INTERVIEW SO FAR.${writerNamesLine(writer)}
+- Everywhere else, use every name (characters, NPCs, places) in the form the story itself uses in SCENES, in ${language} and declined according to ${language} grammar. The plan, card, persona and lorebooks may spell names in another script; do not copy those spellings into the text.
+
+LANGUAGE
+Write everything in ${language}, except the character names inside the [A: …] tag parentheses.
+No words or phrases in other languages: no English (or any other) interjections, catchphrases or quotes mixed in.`;
+
+    const contextText = `${sourcesText ? `${sourcesText}\n\n` : ''}# SCENES (messages #${from}–#${to})
+${sceneText}
+
+# INTERVIEW SO FAR
+${interviewText}${planContext(plan)}
+
+# TASK
+Write the screenwriter segment now, following the instruction exactly.`;
 
     return { instruction, contextText };
 }
