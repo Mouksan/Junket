@@ -318,8 +318,12 @@ export async function collectSources(saved) {
 
     const selectedInterviewIds = new Set(Array.isArray(saved?.interviews) ? saved.interviews : []);
     const archivedInterviews = ctx().chatMetadata?.[META_KEY]?.interviews;
-    for (const item of Array.isArray(archivedInterviews) ? archivedInterviews : []) {
-        if (!selectedInterviewIds.has(item?.id) || !String(item?.text || '').trim()) continue;
+    const readyInterviews = (Array.isArray(archivedInterviews) ? archivedInterviews : [])
+        .filter((item) => selectedInterviewIds.has(item?.id) && String(item?.text || '').trim());
+    if (readyInterviews.length) {
+        blocks.push('The interviews below were recorded during earlier viewing sessions. They describe past events and are provided as background; the current request is about the newly selected scenes.');
+    }
+    for (const item of readyInterviews) {
         const title = String(item.title || 'Без названия').trim();
         const range = item.range ? ` (messages #${item.range.from}–${item.range.to})` : '';
         const rounds = (Array.isArray(item.rounds) ? item.rounds : [])
