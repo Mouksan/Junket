@@ -789,11 +789,17 @@ function bindShootSection(pane) {
 
 let loreList = [];   // текущий список лорбуков в окне: { name, activeKind }
 
+function selectedInterviewIds(saved) {
+    return new Set(Array.isArray(saved?.interviews) ? saved.interviews : []);
+}
+
 function sourcesSectionHtml() {
     const store = getChatStore();
     const flags = getSourceFlags(store?.sources);
     const selected = resolveLoreSelection(store?.sources);
+    const selectedInterviews = selectedInterviewIds(store?.sources);
     loreList = getLorebookList();
+    const archived = Array.isArray(store?.interviews) ? store.interviews.filter((item) => String(item.text || '').trim()) : [];
 
     const check = (flag, label) => `
         <label class="checkbox_label jnk-check">
@@ -811,6 +817,15 @@ function sourcesSectionHtml() {
             </label>`).join('')
         : '<div class="jnk-muted jnk-lore-empty">Лорбуков нет.</div>';
 
+    const interviewRows = archived.length
+        ? archived.map((item) => `
+            <label class="jnk-lore-row jnk-context-interview">
+                <input type="checkbox" data-interview="${escapeHtml(item.id)}" ${selectedInterviews.has(item.id) ? 'checked' : ''}>
+                <span class="jnk-lore-name">${escapeHtml(item.title || defaultTitle(item.range))}</span>
+                <span class="jnk-lore-tokens">${escapeHtml(item.range ? `#${item.range.from}–${item.range.to}` : formatLabel(item.format, item.venue))}</span>
+            </label>`).join('')
+        : '<div class="jnk-muted jnk-lore-empty">Готовых интервью пока нет.</div>';
+
     return `
         <div class="jnk-section jnk-sources">
             <div class="jnk-section-title">Что знает модель</div>
@@ -822,6 +837,9 @@ function sourcesSectionHtml() {
             <div class="jnk-subtitle">Лорбуки</div>
             <div class="jnk-lore-list">${loreRows}</div>
             <div class="jnk-lore-summary"></div>
+            <div class="jnk-subtitle">Готовые интервью</div>
+            <div class="jnk-lore-list jnk-context-interview-list">${interviewRows}</div>
+            <div class="jnk-hint">Отмеченные интервью попадут в контекст следующей генерации.</div>
         </div>`;
 }
 
@@ -835,18 +853,24 @@ function readSourcesFromPane(pane) {
         const item = loreList[Number(input.dataset.lore)];
         if (item && input.checked) selectedNames.push(item.name);
     });
-    return { flags, selectedNames };
+    const selectedInterviews = [];
+    pane.querySelectorAll('[data-interview]').forEach((input) => {
+        const item = getChatStore()?.interviews?.find((candidate) => candidate.id === input.dataset.interview);
+        if (item && input.checked) selectedInterviews.push(item.id);
+    });
+    return { flags, selectedNames, selectedInterviews };
 }
 
 function bindSourcesSection(pane) {
     const section = pane.querySelector('.jnk-sources');
     if (!section) return;
     section.addEventListener('change', (e) => {
-        if (!e.target.matches('[data-flag], [data-lore]')) return;
+        if (!e.target.matches('[data-flag], [data-lore], [data-interview]')) return;
         const store = getChatStore();
         if (!store) return;
-        const { flags, selectedNames } = readSourcesFromPane(section);
+        const { flags, selectedNames, selectedInterviews } = readSourcesFromPane(section);
         storeSources(store, flags, selectedNames);
+        store.sources.interviews = selectedInterviews;
         saveChatStoreDebounced();
         if (e.target.matches('[data-lore]')) renderLoreSummary();
     });
@@ -1393,6 +1417,8 @@ function onCastInput(e) {
 
 let archiveOpenId = null;   // какое интервью открыто в архиве (null — список)
 let archiveEditId = null;   // какое интервью сейчас редактируется (✎)
+let archiveFormatFilter = 'all';
+let archiveSortDirection = 'desc'; // по номеру сообщения: новые диапазоны первыми
 
 function renderArchive() {
     if (!overlayEl) return;
@@ -1422,9 +1448,13 @@ function renderArchive() {
         return;
     }
 
-    // Избранные — сверху (новые первыми), под ними разделитель «Остальные»
-    const favorites = items.filter((i) => i.favorite).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
-    const rest = items.filter((i) => !i.favorite);
+    const filtered = archiveFormatFilter === 'all' ? items : items.filter((item) => item.format === archiveFormatFilter);
+    const chronology = (a, b) => {
+        const aRange = Number.isFinite(a.range?.from) ? a.range.from : (a.range?.to ?? a.createdAt ?? 0);
+        const bRange = Number.isFinite(b.range?.from) ? b.range.from : (b.range?.to ?? b.createdAt ?? 0);
+        return archiveSortDirection === 'desc' ? bRange - aRange : aRange - bRange;
+    };
+    const sorted = [...filtered].sort(chronology);
     const rowHtml = (item) => {
         const meta = [
             formatLabel(item.format, item.venue),
@@ -1442,8 +1472,23 @@ function renderArchive() {
                 </button>
             </div>`;
     };
-    const divider = favorites.length && rest.length ? '<div class="jnk-archive-divider"><span>Остальные</span></div>' : '';
-    pane.innerHTML = `<div class="jnk-archive-list">${favorites.map(rowHtml).join('')}${divider}${rest.map(rowHtml).join('')}</div>`;
+    const filterOptions = FORMATS.map((format) => `<option value="${escapeHtml(format.id)}" ${archiveFormatFilter === format.id ? 'selected' : ''}>${escapeHtml(format.label)}</option>`).join('');
+    const directionLabel = archiveSortDirection === 'desc' ? 'Сначала новые сообщения' : 'Сначала старые сообщения';
+    pane.innerHTML = `
+        <div class="jnk-archive-toolbar">
+            <label class="jnk-archive-filter"><span>Тип</span><select class="text_pole jnk-archive-format"><option value="all" ${archiveFormatFilter === 'all' ? 'selected' : ''}>Все интервью</option>${filterOptions}</select></label>
+            <button class="jnk-btn jnk-archive-sort" type="button" title="${directionLabel}" aria-label="${directionLabel}"><i class="fa-solid ${archiveSortDirection === 'desc' ? 'fa-arrow-down-wide-short' : 'fa-arrow-up-wide-short'}"></i><span>${archiveSortDirection === 'desc' ? 'Новые сообщения' : 'Старые сообщения'}</span></button>
+        </div>
+        ${filtered.length ? `<div class="jnk-archive-list">${sorted.map(rowHtml).join('')}</div>` : '<div class="jnk-empty">Для этого типа интервью записей нет.</div>'}`;
+
+    pane.querySelector('.jnk-archive-format').addEventListener('change', (e) => {
+        archiveFormatFilter = e.target.value;
+        renderArchive();
+    });
+    pane.querySelector('.jnk-archive-sort').addEventListener('click', () => {
+        archiveSortDirection = archiveSortDirection === 'desc' ? 'asc' : 'desc';
+        renderArchive();
+    });
 
     pane.querySelectorAll('.jnk-archive-item').forEach((row) => {
         const open = () => {

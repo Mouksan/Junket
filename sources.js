@@ -7,7 +7,7 @@
 // Лорбуки читаются целиком через loadWorldInfo() — без активации по ключам,
 // как в Realmweaver: актёрам нужна фактура мира целиком. Отключённые записи пропускаются.
 
-import { ctx, getSettings } from './store.js';
+import { ctx, getSettings, META_KEY } from './store.js';
 import { selected_world_info, world_info, METADATA_KEY } from '../../../world-info.js';
 
 // ---------------------------------------------------------------------------
@@ -314,6 +314,19 @@ export async function collectSources(saved) {
             kept.push(entry);
         }
         if (kept.length) blocks.push(`# LOREBOOK: ${name}\n${kept.join('\n\n')}`);
+    }
+
+    const selectedInterviewIds = new Set(Array.isArray(saved?.interviews) ? saved.interviews : []);
+    const archivedInterviews = ctx().chatMetadata?.[META_KEY]?.interviews;
+    for (const item of Array.isArray(archivedInterviews) ? archivedInterviews : []) {
+        if (!selectedInterviewIds.has(item?.id) || !String(item?.text || '').trim()) continue;
+        const title = String(item.title || 'Без названия').trim();
+        const range = item.range ? ` (messages #${item.range.from}–${item.range.to})` : '';
+        const rounds = (Array.isArray(item.rounds) ? item.rounds : [])
+            .filter((round) => String(round?.text || '').trim())
+            .map((round, index) => `\n\n## Follow-up ${index + 1}\n${String(round.text).trim()}`)
+            .join('');
+        blocks.push(`# READY INTERVIEW: ${title}${range}\n${String(item.text).trim()}${rounds}`);
     }
 
     return { text: blocks.join('\n\n'), loreTokens, loreLimit, droppedEntries };
